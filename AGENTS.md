@@ -1,4 +1,4 @@
-# Navora: Agent Instructions
+# Rounds: Agent Instructions
 
 Shared instructions for every coding agent on this repo (Claude Code, Codex, Cursor, etc.).
 Two humans work on it at the same time, each with their own agent. Following these rules keeps the two of you from overwriting each other's work.
@@ -32,12 +32,12 @@ Each area has one owner at a time. Don't make large edits to the other person's 
 
 | Area | Path | Owner |
 |---|---|---|
-| Frontend (Next.js) | `frontend/` | _TBD_ |
+| Frontend (React + Vite) | `frontend/` | _TBD_ |
 | Backend API (FastAPI) | `backend/app/api/` | _TBD_ |
 | Optimizer + routing | `backend/app/optimization/` | _TBD_ |
 | Deep Agent + tools | `backend/app/agents/`, `backend/app/tools/` | _TBD_ |
 | Spatial / Matterport / CoStar | `backend/app/spatial/` | _TBD_ |
-| Shared contracts | `backend/app/models/`, `frontend/types/` | **both; announce changes** |
+| Shared contracts | `backend/app/models/`, `frontend/src/types/` | **both; announce changes** |
 
 **Shared contracts:** Pydantic models and TypeScript types must stay identical. If you change one, update the other in the same commit and mention it in the commit message.
 
@@ -45,9 +45,12 @@ Each area has one owner at a time. Don't make large edits to the other person's 
 
 - What we're building and why: [`pitch.md`](pitch.md)
 - Deep Agents (LangChain) reference and architecture: [`deepagents-notes.md`](deepagents-notes.md)
-- Status: **early build.** Stack planned: Next.js + TS + Tailwind + shadcn/ui; Python FastAPI; LangChain `deepagents` on an Amazon Bedrock model; OR-Tools; Matterport SDK/API.
+- Status: **early build.**
+- Stack:
+  - **Backend (decided):** Python + FastAPI. All the AI and optimization runs here: LangChain `deepagents` on an Amazon Bedrock model, OR-Tools, A* pathfinding, and the Matterport/CoStar API clients (keys stay server-side).
+  - **Frontend (proposed, not final):** React + Vite + TypeScript + Tailwind + shadcn/ui, built as a single-page app that calls FastAPI. The Matterport Showcase SDK embeds the 3D view client-side, next to a 2D SVG floor plan for routes. No Next.js: we don't need server-side rendering or its API routes, since FastAPI is the backend.
 
-**Product in one line:** Navora plans and replans shifts for hospital staff who cover the whole building (transporters, respiratory therapists, IV team nurses). It uses a deterministic optimizer on a navigation graph built from a Matterport digital twin, with a Deep Agent coordinating and a human approving every change.
+**Product in one line:** Rounds plans and replans shifts for hospital staff who cover the whole building (transporters, respiratory therapists, IV team nurses). It uses a deterministic optimizer on a navigation graph built from a Matterport digital twin, with a Deep Agent coordinating and a human approving every change.
 
 ## 5. Non-negotiable product rules
 

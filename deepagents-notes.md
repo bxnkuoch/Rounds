@@ -1,4 +1,4 @@
-# LangChain Deep Agents: Notes for Navora
+# LangChain Deep Agents: Notes for Rounds
 
 > Source: github.com/langchain-ai/deepagents and docs.langchain.com/oss/python/deepagents (read 2026-11-14).
 > At the hackathon, check the installed version with `pip show deepagents` before relying on any API below.
@@ -9,7 +9,7 @@ Deep Agents is LangChain's "batteries-included agent harness." It's an MIT-licen
 
 A plain LangChain agent (`create_agent`) is a model calling tools in a loop. A **deep agent** adds what long, multi-step tasks need:
 
-| Feature | What it is | Navora use |
+| Feature | What it is | Rounds use |
 |---|---|---|
 | **Planning** | `write_todos` tool (pending → in_progress → completed). **Opt-in since v0.7** through `TodoListMiddleware()` | Break "optimize my shift" or "add Room 204 and replan" into visible steps |
 | **Virtual filesystem** | `ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `delete` | Store the floor graph, shift plans, and handoff reports as files instead of in the prompt |
@@ -61,14 +61,14 @@ if "__interrupt__" in result:
     # or {"type": "reject", "message": "..."}  /  {"type": "edit", "edited_action": {...}}
 ```
 
-## Navora architecture sketch
+## Rounds architecture sketch
 
 **Rule: the LLM coordinates; deterministic code does the math.** A* or Dijkstra and OR-Tools stay as plain Python tools. The model never estimates distances, orderings, or clinical urgency.
 
 ```
 Nurse (chat / voice)
    ▼
-Navora Coordinator (main deep agent)
+Rounds Coordinator (main deep agent)
    ├─ write_todos            → visible plan
    ├─ /plans/*.json          → current + previous schedule (lets the UI show old vs new route)
    ├─ /memories/  (Store)    → unit knowledge carried across shifts

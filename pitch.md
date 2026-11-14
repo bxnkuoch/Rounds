@@ -1,7 +1,7 @@
-# Navora: Pitch & Problem Statement
+# Rounds: Pitch & Problem Statement
 
 > **The smarter way through every shift.**
-> Navora is built for the people who keep a hospital moving: transporters, respiratory therapists, and IV teams.
+> Rounds is built for the people who keep a hospital moving: transporters, respiratory therapists, and IV teams.
 
 Status: brainstorming draft (2026-11-14). Items marked **[verify]** need a source before they go on a slide.
 
@@ -9,7 +9,7 @@ Status: brainstorming draft (2026-11-14). Items marked **[verify]** need a sourc
 
 ## One-liner
 
-**Navora turns a hospital's 3D digital twin into a live plan for every staff member who covers the whole building. An AI agent re-optimizes each shift as new requests arrive, and a human approves every change.**
+**Rounds turns a hospital's 3D digital twin into a live plan for every staff member who covers the whole building. An AI agent re-optimizes each shift as new requests arrive, and a human approves every change.**
 
 ## Problem statement
 
@@ -33,7 +33,7 @@ Today that plan lives in their heads or on a pager. Every interruption means re-
 
 ## Who it's for
 
-| Role | Their shift looks like | What Navora fixes |
+| Role | Their shift looks like | What Rounds fixes |
 |---|---|---|
 | **Respiratory therapist** (demo hero) | Scheduled treatments across 3+ floors, ventilator checks, STAT calls | Orders treatments within their time windows; replans when a STAT call arrives |
 | **Transporter** | Pickup → drop-off jobs from a dispatcher, beds and wheelchairs | Accessible routes only (no stairs); keeps jobs on time for OR and imaging slots |
@@ -41,11 +41,11 @@ Today that plan lives in their heads or on a pager. Every interruption means re-
 | **Float / resource nurse** | Pulled to whichever unit needs help; ad-hoc tasks across units | Same engine; tasks arrive in bursts from different units |
 | **Supervisor / dispatcher** (approver) | Oversees the team | Approves replans; sees on-time risk across staff |
 
-**Nurses are in scope when their work covers the building** (IV team, float/resource nurses). **Out of scope (on purpose):** bedside nurses on a single unit (patients grouped together, so the gain comes from sequencing, not routing) and ER staff (priorities set by triage, a clinical judgment Navora must never make). Both are possible future work.
+**Nurses are in scope when their work covers the building** (IV team, float/resource nurses). **Out of scope (on purpose):** bedside nurses on a single unit (patients grouped together, so the gain comes from sequencing, not routing) and ER staff (priorities set by triage, a clinical judgment Rounds must never make). Both are possible future work.
 
 ## Solution
 
-Navora tells each staff member **what to do next, when, and the best way to get there**, and keeps that answer correct as the shift changes.
+Rounds tells each staff member **what to do next, when, and the best way to get there**, and keeps that answer correct as the shift changes.
 
 1. **One job model for all three roles.** A job is either a **single-stop job** (treatment, line placement) or a **pickup → drop-off job** (transport), with time windows, a duration, a priority from the source system, and an accessibility requirement.
 2. **Deterministic optimizer (pickup-and-delivery in the MVP).** A* on the building's navigation graph plus OR-Tools routing with time windows. For transport jobs, the pickup comes before its drop-off, both are done by the same person, at most one bed or wheelchair is moved at a time, and each end has its own window (patient ready / CT slot). The output is an ordered route, arrival times, walking distance, and **explicit flags for jobs that can't be done in time**. Jobs are never silently dropped.
@@ -53,7 +53,7 @@ Navora tells each staff member **what to do next, when, and the best way to get 
 4. **Human approval.** Every replan appears as a before/after card for the staff member or supervisor to approve.
 5. **Spatially aware.** The navigation graph comes from the building's Matterport digital twin, so routes respect real walls, elevators, and accessibility.
 
-**Safety principle:** Navora orders and routes work. It never decides clinical urgency. Priorities come from the source system, and a human approves every change.
+**Safety principle:** Rounds orders and routes work. It never decides clinical urgency. Priorities come from the source system, and a human approves every change.
 
 ## How it maps to the tracks
 
@@ -73,12 +73,12 @@ Navora tells each staff member **what to do next, when, and the best way to get 
 | 0:45–1:15 | **Interruption** | "STAT blood gas, Room 204." The agent panel shows its todo plan → scheduler-agent → spatial-agent → **approval card** showing the old and new routes, and one job flagged as now at risk |
 | 1:15–1:35 | **Same engine, different role** | Switch to a transporter with 4 queued jobs, then add "bed move 204 → CT, scan at 10:30." The optimizer puts the pickup and drop-off into the queue (pickup before drop-off, one bed at a time, arriving before the CT slot), and the route detours to the elevator because of the accessibility flag |
 | 1:35–1:50 | **Explain** | "Why is 310 before 305?" The agent answers with actual travel times and time windows |
-| 1:50–2:00 | **Close** | "Navora is built for the people who keep a hospital moving." Then the metrics |
+| 1:50–2:00 | **Close** | "Rounds is built for the people who keep a hospital moving." Then the metrics |
 
 ## Questions judges will ask
 
-- **"Don't hospitals already have dispatch software?"** Yes, for transport, and it assigns one job at a time. Navora optimizes the whole shift's sequence and route against the building's real geometry, works across roles, and replans conversationally.
-- **"Who decides priority?"** The source system (orders, dispatch). Navora never changes clinical urgency or medication timing.
+- **"Don't hospitals already have dispatch software?"** Yes, for transport, and it assigns one job at a time. Rounds optimizes the whole shift's sequence and route against the building's real geometry, works across roles, and replans conversationally.
+- **"Who decides priority?"** The source system (orders, dispatch). Rounds never changes clinical urgency or medication timing.
 - **"Will staff actually use it?"** They get one "next job" card and a single tap to accept. Voice input is next. The supervisor uses the full dashboard.
 - **"Is the hospital data real?"** The patients and jobs are synthetic. The spatial data is real Matterport/CoStar data where available, and the demo labels which is which.
 - **"How do you know it's better?"** Both routes run on the same graph, from the same start, with the same jobs. We show the computed difference in walking and on-time rate.
