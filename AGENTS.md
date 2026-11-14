@@ -32,12 +32,12 @@ Each area has one owner at a time. Don't make large edits to the other person's 
 
 | Area | Path | Owner |
 |---|---|---|
-| Frontend (React + Vite) | `frontend/` | _TBD_ |
+| Frontend (framework TBD) | `frontend/` | _TBD_ |
 | Backend API (FastAPI) | `backend/app/api/` | _TBD_ |
 | Optimizer + routing | `backend/app/optimization/` | _TBD_ |
 | Deep Agent + tools | `backend/app/agents/`, `backend/app/tools/` | _TBD_ |
 | Spatial / Matterport / CoStar | `backend/app/spatial/` | _TBD_ |
-| Shared contracts | `backend/app/models/`, `frontend/src/types/` | **both; announce changes** |
+| Shared contracts | `backend/app/models/`, frontend types folder (path depends on the framework) | **both; announce changes** |
 
 **Shared contracts:** Pydantic models and TypeScript types must stay identical. If you change one, update the other in the same commit and mention it in the commit message.
 
@@ -48,7 +48,7 @@ Each area has one owner at a time. Don't make large edits to the other person's 
 - Status: **early build.**
 - Stack:
   - **Backend (decided):** Python + FastAPI. All the AI and optimization runs here: LangChain `deepagents` on an Amazon Bedrock model, OR-Tools, A* pathfinding, and the Matterport/CoStar API clients (keys stay server-side).
-  - **Frontend (proposed, not final):** React + Vite + TypeScript + Tailwind + shadcn/ui, built as a single-page app that calls FastAPI. The Matterport Showcase SDK embeds the 3D view client-side, next to a 2D SVG floor plan for routes. No Next.js: we don't need server-side rendering or its API routes, since FastAPI is the backend.
+  - **Frontend (UNDECIDED):** the options are React + Vite (a single-page app) or Next.js. Both would use TypeScript + Tailwind + shadcn/ui, call FastAPI, and show a 2D floor plan plus the Matterport Showcase SDK 3D view. **Agents: don't scaffold the frontend or pick a framework until both teammates confirm here.**
 
 **Product in one line:** Rounds plans and replans shifts for hospital staff who cover the whole building (transporters, respiratory therapists, IV team nurses). It uses a deterministic optimizer on a navigation graph built from a Matterport digital twin, with a Deep Agent coordinating and a human approving every change.
 
