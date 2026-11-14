@@ -1,0 +1,29 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Sponsor data (CoStar/Matterport/Vexcel): never commit raw datasets
+data/raw/
+*.costar.*
+
+# Claude Code personal settings
+.claude/settings.local.json
+.claude/worktrees/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

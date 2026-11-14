@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/sync-latest.sh",
+            "timeout": 30,
+            "statusMessage": "Fetching latest changes from GitHub..."
+          }
+        ]
+      }
+    ]
+  }
+}
