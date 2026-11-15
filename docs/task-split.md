@@ -44,12 +44,12 @@ Read `deepagents-notes.md` and check the docs MCP servers first (AGENTS.md §6).
 Read `docs/handoff-2026-11-15.md` first. It covers the nav graph, the exporter, and the data caveats.
 
 - [ ] Take over `backend/app/spatial/` (nav graph v1 is done, with 19 tests). Spot-check the 15 out-of-room place snaps.
-- [ ] Generate synthetic staff and jobs on Airedale places, deterministic from a seed and clearly labeled synthetic.
+- [x] Generate synthetic staff and jobs on Airedale places, deterministic from a seed and clearly labeled synthetic.
 - [x] `backend/app/optimization/`: OR-Tools on `NavGraph.distance_matrix`, with pickup before dropoff, time windows and priorities. Infeasible jobs are flagged, never dropped. Use small deterministic fixtures.
 - [x] Baseline vs optimized metrics on the same graph, start and job set (no hardcoded improvements).
-- [ ] `backend/app/services/`: implement the contract above.
-- [ ] `backend/app/main.py` + `backend/app/api/`: app setup, CORS, endpoints for places/staff/jobs/plans/routes, and loading the nav graph at startup.
-- [ ] Frontend: pick the framework (it's still TBD in AGENTS.md §4; update it there). Then build the 2D floor plan with routes, the Matterport Showcase view (localhost only), the plan view, the chat panel, and the approval card.
+- [x] `backend/app/services/`: implement the contract above.
+- [x] `backend/app/main.py` + `backend/app/api/`: app setup, CORS, endpoints for places/staff/jobs/plans/routes, and loading the nav graph at startup.
+- [x] Frontend: pick the framework (it's still TBD in AGENTS.md §4; update it there). Then build the 2D floor plan with routes, the Matterport Showcase view (localhost only), the plan view, the chat panel, and the approval card.
 
 ## Both: decide later
 
