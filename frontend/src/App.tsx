@@ -137,7 +137,8 @@ export default function App() {
           </div>
           <p className="px-3 pb-2 text-xs text-slate-500">
             Layout and place names: {attribution.name ?? 'Matterport model'} ({map.model_id}), public Matterport tour
-            {attribution.url ? <> · <a className="underline" href={attribution.url} target="_blank" rel="noreferrer">source</a></> : null}.
+            {attribution.presented_by ? <> by {attribution.presented_by}</> : null}
+            {attribution.share_url ? <> · <a className="underline" href={attribution.share_url} target="_blank" rel="noreferrer">source</a></> : null}.
             Patients, staff and jobs are synthetic.
           </p>
         </section>

@@ -43,7 +43,7 @@ Read `deepagents-notes.md` and check the docs MCP servers first (AGENTS.md §6).
 
 Read `docs/handoff-2026-11-15.md` first. It covers the nav graph, the exporter, and the data caveats.
 
-- [ ] Take over `backend/app/spatial/` (nav graph v1 is done, with 19 tests). Spot-check the 15 out-of-room place snaps.
+- [x] Take over `backend/app/spatial/` (nav graph v1 is done, with 19 tests). Spot-check the 15 out-of-room place snaps (checked numerically, see the handoff caveats).
 - [x] Generate synthetic staff and jobs on Airedale places, deterministic from a seed and clearly labeled synthetic.
 - [x] `backend/app/optimization/`: OR-Tools on `NavGraph.distance_matrix`, with pickup before dropoff, time windows and priorities. Infeasible jobs are flagged, never dropped. Use small deterministic fixtures.
 - [x] Baseline vs optimized metrics on the same graph, start and job set (no hardcoded improvements).

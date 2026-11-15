@@ -18,6 +18,13 @@ type Props = {
   onSimulateStat: () => void
 }
 
+/** "HH:MM" `minutes` after a naive ISO time (default due time, so a new request isn't already due). */
+function hhmmAfter(iso: string, minutes: number): string {
+  const d = new Date(iso)
+  d.setMinutes(d.getMinutes() + minutes)
+  return d.toTimeString().slice(0, 5)
+}
+
 /** Dispatch inbox: structured requests come from here (or the source system), never from the chat model. */
 export function DispatchPanel({ meta, places, busy, onCreate, onSimulateStat }: Props) {
   const rooms = places.filter(p => /^(Room \d+|Assessment Room \d+)$/.test(p.name))
@@ -27,7 +34,7 @@ export function DispatchPanel({ meta, places, busy, onCreate, onSimulateStat }: 
   const [kind, setKind] = useState(kinds[0] ?? '')
   const [pickup, setPickup] = useState(rooms[0]?.id ?? '')
   const [dropoff, setDropoff] = useState(named[0]?.id ?? '')
-  const [due, setDue] = useState(meta.now.slice(11, 16))
+  const [due, setDue] = useState(() => hhmmAfter(meta.now, 30))
   const [priority, setPriority] = useState(2)
 
   const submit = () => onCreate({
