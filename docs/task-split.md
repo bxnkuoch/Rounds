@@ -44,8 +44,12 @@ Read `docs/handoff-2026-11-15.md` first. It covers the nav graph, the exporter, 
 
 - [ ] Take over `backend/app/spatial/` (nav graph v1 is done, with 19 tests). Spot-check the 15 out-of-room place snaps.
 - [ ] Generate synthetic staff and jobs on Airedale places, deterministic from a seed and clearly labeled synthetic.
-- [ ] `backend/app/optimization/`: OR-Tools on `NavGraph.distance_matrix`, with pickup before dropoff, time windows and priorities. Infeasible jobs are flagged, never dropped. Use small deterministic fixtures.
-- [ ] Baseline vs optimized metrics on the same graph, start and job set (no hardcoded improvements).
+- [x] `backend/app/optimization/`: OR-Tools on `NavGraph.distance_matrix`, with pickup before dropoff, time windows and priorities. Infeasible jobs are flagged, never dropped. Use small deterministic fixtures.
+- [x] Baseline vs optimized metrics on the same graph, start and job set (no hardcoded improvements).
 - [ ] `backend/app/services/`: implement the contract above.
 - [ ] `backend/app/main.py` + `backend/app/api/`: app setup, CORS, endpoints for places/staff/jobs/plans/routes, and loading the nav graph at startup.
 - [ ] Frontend: pick the framework (it's still TBD in AGENTS.md §4; update it there). Then build the 2D floor plan with routes, the Matterport Showcase view (localhost only), the plan view, the chat panel, and the approval card.
+
+## Both: decide later
+
+- [ ] Airedale usage rights. Decide together whether to ask the CoStar/Matterport sponsor team if exporting the layout of the public Airedale tour (`6Ee2LwLfx58`) is OK for the demo. Either way: keep the export out of git, and credit the source in the UI ("Airedale Hospital AAU, public Matterport tour by apollo3d"). If the answer is no, switch to a CoStar medical office building (e.g. `7uM5JKssTED`) and call it a clinic, not a hospital. See `docs/handoff-2026-11-15.md`, "Open questions".
