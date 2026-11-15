@@ -131,9 +131,7 @@ class EventTranslator:
 
     def _on_ai(self, source: str, m: AIMessage) -> list[AgentEvent]:
         if source == COORDINATOR:
-            text = _text(m.content)
-            if text:
-                self._last_text = text
+            self._last_text = _text(m.content)  # may be "": the gated call's own message, not an earlier turn's
             self._buf = ""
         events: list[AgentEvent] = []
         for tc in m.tool_calls:
@@ -173,7 +171,7 @@ class EventTranslator:
                 diff = self.services.get_proposal(plan_id).diff
             except Exception:  # noqa: BLE001 - unknown plan or broken services: an error event, never a raise
                 return [self.emit(Error, source=source, code="unknown_plan", retryable=False,
-                                  message=f"Proposal {plan_id!r} does not exist.")]
+                                  message=f"Proposal {plan_id!r} could not be loaded for approval.")]
             return [self.emit(
                 ApprovalRequired, source=source, approval_id=intr.id, plan_id=plan_id, plan_diff=diff,
                 rationale=self._buf or self._last_text, allowed=["approve", "reject"],

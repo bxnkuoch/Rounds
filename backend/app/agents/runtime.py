@@ -39,6 +39,11 @@ STREAM_MODE = ["messages", "updates"]
 ONE_PLAN_AT_A_TIME = "One plan at a time"
 DEFAULT_REJECT_NOTE = "The dispatcher rejected this plan. It was not applied."
 MAX_AUTO_REJECT_ROUNDS = 2
+_INPUT_NOT_SENT = {
+    "code": "input_not_sent", "retryable": True,
+    "message": "Your message was not sent because the agent could not finish clearing an earlier request. "
+               "Please send it again.",
+}
 
 
 class ThreadBusy(Exception):
@@ -170,8 +175,16 @@ class AgentRuntime:
         if lock.locked():  # no await between this check and the acquire, so it is atomic
             raise ThreadBusy(thread_id)
         async with lock:
+            tr = EventTranslator(thread_id, self.services)  # fresh per run: seq restarts at 0 (R7)
             # Re-check under the lock: the route's eager check may have raced another request.
-            intr, card = await self._pending(thread_id)
+            try:
+                intr, card = await self._pending(thread_id)
+            except Exception as exc:  # noqa: BLE001 - a broken checkpointer must still end with `done`
+                log.warning("reading thread state failed on %s: %s", thread_id, type(exc).__name__)
+                yield tr.emit(RunStarted, run_id=uuid.uuid4().hex)
+                yield tr.emit(Error, **_error_fields(exc))
+                yield tr.emit(Done, status="completed")
+                return
             if resume is not None:
                 approval_id, decision, note = resume
                 if card is None or intr.id != approval_id:
@@ -185,7 +198,6 @@ class AgentRuntime:
             else:
                 inputs = [user_input]
 
-            tr = EventTranslator(thread_id, self.services)  # fresh per run: seq restarts at 0 (R7)
             yield tr.emit(RunStarted, run_id=uuid.uuid4().hex)
 
             try:
@@ -214,6 +226,8 @@ class AgentRuntime:
                 except Exception as exc:  # noqa: BLE001 - every failure becomes an error event
                     log.warning("agent run failed on thread %s: %s", thread_id, type(exc).__name__)
                     yield tr.emit(Error, **_error_fields(exc))
+                    if inputs:  # the user's input was still queued behind the failed interrupt-clearing step
+                        yield tr.emit(Error, **_INPUT_NOT_SENT)
                     yield tr.emit(Done, status=await self._status_after_failure(thread_id))
                     return
                 finally:
@@ -235,6 +249,8 @@ class AgentRuntime:
                     # ourselves; past the limit, leave it: the next run_* clears it before running.
                     auto_rejects += 1
                     if auto_rejects > MAX_AUTO_REJECT_ROUNDS:
+                        if inputs:  # the user's message never ran
+                            yield tr.emit(Error, **_INPUT_NOT_SENT)
                         yield tr.emit(Error, code="unknown_plan", retryable=False,
                                       message="The agent kept requesting approval for plans that do not exist. "
                                               "Nothing was applied.")
@@ -242,7 +258,13 @@ class AgentRuntime:
                         return
                     inputs.insert(0, Command(resume={"decisions": _reject_all(intr)}))
 
-            snap = await agent.aget_state(config)
+            try:
+                snap = await agent.aget_state(config)
+            except Exception as exc:  # noqa: BLE001 - never end the stream without `done`
+                log.warning("final state read failed on thread %s: %s", thread_id, type(exc).__name__)
+                yield tr.emit(Error, **_error_fields(exc))
+                yield tr.emit(Done, status=await self._status_after_failure(thread_id))
+                return
             final = _final_text((snap.values or {}).get("messages", []))
             if final:
                 yield tr.emit(Message, text=final)
@@ -287,10 +309,13 @@ class AgentRuntime:
         except Exception:  # noqa: BLE001 - unknown plan or broken services: no card, never a crash
             log.warning("get_proposal(%r) failed; no approval card", plan_id)
             return None
-        last_ai = next((m for m in reversed(messages) if isinstance(m, AIMessage) and _text(m.content)), None)
+        # The rationale is the text of the AI message that made this apply_plan call, never an earlier turn's.
+        gated_ai = next((m for m in reversed(messages) if isinstance(m, AIMessage) and any(
+            tc["name"] == "apply_plan" and isinstance(tc["args"], dict) and tc["args"].get("plan_id") == plan_id
+            for tc in m.tool_calls)), None)
         return ApprovalRequired(
             thread_id=thread_id, seq=0, source=COORDINATOR, approval_id=intr.id, plan_id=plan_id, plan_diff=diff,
-            rationale=_text(last_ai.content) if last_ai else "", allowed=["approve", "reject"],
+            rationale=_text(gated_ai.content) if gated_ai else "", allowed=["approve", "reject"],
         )
 
 

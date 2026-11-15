@@ -278,3 +278,23 @@ def test_interrupt_any_get_proposal_failure_is_error_not_raise():
     fake.get_proposal = broken
     (ev,) = t.feed(interrupt_chunk({"plan_id": "P-1"}))
     assert isinstance(ev, Error) and ev.code == "unknown_plan" and ev.retryable is False
+
+
+def test_interrupt_rationale_not_from_earlier_message():
+    _, t = tr()
+    t.feed(((), "updates", {"model": {"messages": [AIMessage(content="Earlier turn text.")]}}))
+    gated = AIMessage(content="", tool_calls=[{"name": "apply_plan", "args": {"plan_id": "P-1"}, "id": "a1"}])
+    t.feed(((), "updates", {"model": {"messages": [gated]}}))
+    (ev,) = t.feed(interrupt_chunk({"plan_id": "P-1"}))
+    assert ev.rationale == ""
+
+
+def test_interrupt_load_failure_message_is_neutral():
+    fake, t = tr()
+
+    def broken(plan_id):
+        raise RuntimeError("db down")
+
+    fake.get_proposal = broken
+    (ev,) = t.feed(interrupt_chunk({"plan_id": "P-1"}))
+    assert ev.code == "unknown_plan" and ev.message == "Proposal 'P-1' could not be loaded for approval."

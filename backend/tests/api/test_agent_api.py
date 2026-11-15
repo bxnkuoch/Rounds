@@ -548,3 +548,97 @@ def test_http_disconnect_cancels_run_and_releases_lock(spec_version):
         assert fake.apply_calls == []
 
     asyncio.run(scenario())
+
+
+# --- final review fixes ------------------------------------------------------------------------
+
+def _bad(n: int, start: int = 0) -> list:
+    return [call("apply_plan", {"plan_id": "P-404"}, f"apply-{start + i}") for i in range(n)]
+
+
+def test_input_not_sent_past_auto_reject_limit():
+    """A card-less interrupt that keeps coming back: the queued user message never runs and says so."""
+    with Harness(_bad(6) + [say("Noted."), say("Hi.")]) as h:
+        tid = h.thread()
+        h.message(tid)  # leaves a card-less interrupt behind (3 bad calls)
+        events = h.message(tid, "hello")  # clearing it also fails 3 times, so "hello" never runs
+        assert [e.code for e in events if e.type == "error"][-2:] == ["input_not_sent", "unknown_plan"]
+        assert next(e for e in events if e.type == "error" and e.code == "input_not_sent").retryable is True
+        assert events[-1].type == "done" and events[-1].status == "completed"
+        humans = [m.content for call_ in h.model.calls for m in call_ if isinstance(m, HumanMessage)]
+        assert "hello" not in humans
+    assert h.fake.apply_calls == []
+
+
+def test_input_not_sent_when_clearing_raises():
+    with Harness(_bad(3) + [say("Noted.")]) as h:
+        tid = h.thread()
+        h.message(tid)
+
+        async def boom(*a, **k):
+            raise RuntimeError("down")
+            yield  # pragma: no cover
+
+        h.runtime._agent.astream = boom
+        events = h.message(tid, "hello")
+        assert [e.code for e in events if e.type == "error"] == ["internal_error", "input_not_sent"]
+        assert events[-1].type == "done"
+    assert h.fake.apply_calls == []
+
+
+def test_state_read_failure_at_start_still_ends_with_done():
+    async def scenario():
+        rt = AgentRuntime(FakeServices(), lambda: ScriptedChatModel([say("Hi."), say("Again.")]))
+        tid = rt.create_thread()
+        await _collect(rt.run_message(tid, "a"))  # builds the agent
+
+        async def broken(config):
+            raise RuntimeError("checkpointer down")
+
+        rt._agent.aget_state = broken
+        events = await _collect(rt.run_message(tid, "b"))
+        assert [e.type for e in events] == ["run_started", "error", "done"]
+        assert events[1].code == "internal_error" and events[-1].status == "completed"
+        assert not rt._locks[tid].locked()
+
+    asyncio.run(scenario())
+
+
+def test_final_state_read_failure_still_ends_with_done():
+    async def scenario():
+        rt2 = AgentRuntime(FakeServices(), lambda: ScriptedChatModel([say("Hello.")]))
+        tid = rt2.create_thread()
+        it = rt2.run_message(tid, "a")
+        first = await it.__anext__()
+        assert first.type == "run_started"
+        agent = rt2._get_agent()  # same cached agent the run is about to use
+        real = agent.aget_state
+        calls = 0
+
+        async def flaky(config):
+            nonlocal calls
+            calls += 1
+            if calls >= 2:  # call 1 is the post-stream _pending; call 2 is the final read
+                raise RuntimeError("down")
+            return await real(config)
+
+        agent.aget_state = flaky
+        events = [first] + await _collect(it)
+        assert events[-2].type == "error" and events[-2].code == "internal_error"
+        assert events[-1].type == "done" and events[-1].status == "completed"
+
+    asyncio.run(scenario())
+
+
+def test_rationale_never_comes_from_an_earlier_turn():
+    """Turn 1 ends with assistant text; turn 2's apply_plan message has no text. The card (live and
+    rehydrated) must carry an empty rationale, not turn 1's text."""
+    script = [say("Earlier turn text."), call("apply_plan", {"plan_id": "P-1"}, "apply-1")]
+    with Harness(script) as h:
+        h.fake.propose_plan()
+        tid = h.thread()
+        h.message(tid, "first")
+        events = h.message(tid, "second")
+        live = next(e for e in events if e.type == "approval_required")
+        card = h.client.get(f"/agent/threads/{tid}/state").json()["pending_approval"]
+        assert live.rationale == "" and card["rationale"] == ""
