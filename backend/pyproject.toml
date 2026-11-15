@@ -3,7 +3,9 @@ name = "rounds-backend"
 version = "0.1.0"
 description = "Rounds backend: FastAPI, optimizer, routing, spatial"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "ortools>=9.15.6755",
+]
 
 [dependency-groups]
 dev = ["pytest>=8"]
