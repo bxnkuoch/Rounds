@@ -3,10 +3,9 @@
 Preconditions (unknown thread 404, busy 409, stale approval 409) are checked BEFORE the stream starts, so
 the client gets a real status code instead of a 200 with an error in the body.
 """
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Literal
-
-import asyncio
 
 import anyio
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -15,8 +14,8 @@ from pydantic import BaseModel, Field
 from starlette.types import Receive, Scope, Send
 
 from app.agents.translator import COORDINATOR
-from app.agents.runtime import AgentRuntime, StaleApproval, ThreadBusy, ThreadState, UnknownThread
-from app.models.agent_events import AgentEvent, Done, Error, to_sse
+from app.agents.runtime import AgentRuntime, StaleApproval, ThreadBusy, UnknownThread
+from app.models.agent_events import AgentEvent, Done, Error, ThreadState, to_sse
 from app.models.domain import ReplanEvent
 
 router = APIRouter(prefix="/agent", tags=["agent"])

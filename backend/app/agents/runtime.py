@@ -22,13 +22,14 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, Interrupt
-from pydantic import BaseModel
 
 from app.agents.coordinator import build_agent
 from app.agents.model import AgentUnavailable
 from app.agents.prompts import DISPATCH_TEMPLATES
 from app.agents.translator import COORDINATOR, EventTranslator, _text
-from app.models.agent_events import AgentEvent, ApprovalRequired, Done, Error, Message, RunStarted, TodoItem
+from app.models.agent_events import (
+    AgentEvent, ApprovalRequired, ChatLine, Done, Error, Message, RunStarted, ThreadState, TodoItem,
+)
 from app.models.domain import ReplanEvent
 from app.services.contract import Services
 
@@ -50,17 +51,6 @@ class StaleApproval(Exception):
 
 class UnknownThread(KeyError):
     """No thread with this id was created."""
-
-
-class ChatLine(BaseModel):
-    role: Literal["user", "assistant"]
-    text: str
-
-
-class ThreadState(BaseModel):
-    todos: list[TodoItem]
-    pending_approval: ApprovalRequired | None
-    messages: list[ChatLine]
 
 
 def is_retryable(exc: BaseException) -> bool:

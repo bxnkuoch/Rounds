@@ -66,7 +66,7 @@ A run ends with `done`. After `done(awaiting_approval)`, POST the approval to re
 
 - State (threads, checkpoints, pending approvals) is in memory and lost on restart.
 - `seq` restarts at 0 every run, so order events per run (use `run_id`), not per thread.
-- `ThreadState` and `ChatLine` live in `runtime.py` for now and should move to `app/models/`.
+- `ThreadState` and `ChatLine` (the `GET /state` contract) are in `app/models/agent_events.py`, v0 provisional like the event models.
 - The stub services (`StubServices`) raise `NotImplementedError` except `list_places` and `route_between`; the agent reports the failed tool call instead of inventing a plan until Benjamin implements the services.
 - Place and route tools need the Airedale nav graph export (`backend/data/raw/matterport/6Ee2LwLfx58.json`, gitignored). Without it they return errors.
 - `edit` decisions on approvals are not supported this stage.

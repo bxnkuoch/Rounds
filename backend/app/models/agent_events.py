@@ -97,3 +97,14 @@ AgentEvent = Annotated[
 
 def to_sse(event: AgentEvent) -> str:
     return "data: " + event.model_dump_json() + "\n\n"
+
+
+class ChatLine(BaseModel):
+    role: Literal["user", "assistant"]
+    text: str
+
+
+class ThreadState(BaseModel):
+    todos: list[TodoItem]
+    pending_approval: ApprovalRequired | None
+    messages: list[ChatLine]
