@@ -164,13 +164,15 @@ def simulate_stat(svc: RoundsServices = Depends(get_services)) -> Job:
     if not rooms:
         raise HTTPException(409, "building has no patient rooms")
     kind = rng.choice(STAT_KINDS)
+    room = rng.choice(rooms)
     dropoff = None
     if kind == "transport":
-        dests = sorted((p for p in svc.list_places() if p.name in STAT_DESTINATIONS), key=lambda p: p.id)
+        dests = sorted((p for p in svc.list_places() if p.name in STAT_DESTINATIONS and p.id != room.id),
+                       key=lambda p: p.id)
         dropoff = rng.choice(dests).id if dests else None
         if dropoff is None:
             kind = "breathing_treatment"
-    return _call(svc.create_job, kind, rng.choice(rooms).id, dropoff, earliest=svc.now,
+    return _call(svc.create_job, kind, room.id, dropoff, earliest=svc.now,
                  latest=svc.now + timedelta(minutes=20), priority=1)
 
 

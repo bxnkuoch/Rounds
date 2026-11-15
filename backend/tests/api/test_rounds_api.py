@@ -76,6 +76,12 @@ def test_simulate_stat(client):
     assert job["id"] in {s["job_id"] for a in proposal["plan"]["assignments"] for s in a["stops"]}
 
 
+def test_simulate_stat_transport_never_drops_off_where_it_picks_up(client):
+    jobs = [client.post("/api/jobs/simulate-stat").json() for _ in range(40)]
+    assert any(j["kind"] == "transport" for j in jobs)
+    assert all(j["dropoff_place_id"] != j["pickup_place_id"] for j in jobs)
+
+
 def test_clock(client):
     m = client.post("/api/clock", json={"now": "2026-11-15T09:30:00"}).json()
     assert m["now"] == "2026-11-15T09:30:00"
