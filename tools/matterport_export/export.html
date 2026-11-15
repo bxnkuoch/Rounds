@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Matterport graph export</title>
+<style>
+  body { font: 14px system-ui, sans-serif; margin: 16px; }
+  iframe { width: 100%; max-width: 960px; height: 480px; border: 0; }
+  pre { background: #f4f4f4; padding: 8px; max-width: 960px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h3>Matterport graph export: <span id="mid"></span></h3>
+<iframe id="showcase" allow="xr-spatial-tracking"></iframe>
+<pre id="log">starting…</pre>
+
+<!-- Legacy Showcase SDK loader; verified working with our key on localhost (2026-11-15).
+     Docs: https://developers.matterport.com/overview/ , https://developers.matterport.com/embed-sdk/ -->
+<script src="https://static.matterport.com/showcase-sdk/latest.js"></script>
+<script>
+const SDK_KEY = "__MATTERPORT_SDK_KEY__";          // injected by serve.py at request time
+const SCHEMA_VERSION = 1;
+const SETTLE_MS = 3000;   // collections must be unchanged this long before export
+const TIMEOUT_MS = 60000;
+
+const log = (msg) => { document.getElementById('log').textContent += '\n' + msg; console.log('[export]', msg); };
+const modelId = new URLSearchParams(location.search).get('m');
+window.EXPORT_RESULT = { status: 'pending' };
+
+// SDK is y-up; the GraphQL API (and our backend) is z-up. Verified against the
+// API on model 7uM5JKssTED: api = (sdk.x, -sdk.z, sdk.y), ~7 mm RMS.
+const toZUp = (v) => v && ({ x: v.x, y: -v.z, z: v.y });
+const boundsToZUp = (b) => b && ({
+  min: { x: b.min.x, y: -b.max.z, z: b.min.y },
+  max: { x: b.max.x, y: -b.min.z, z: b.max.y },
+});
+
+function collect(sdk, ns) {
+  const items = {};
+  let lastChange = Date.now();
+  sdk[ns].data.subscribe({
+    onCollectionUpdated(c) { Object.assign(items, c); lastChange = Date.now(); },
+  });
+  return { items, lastChange: () => lastChange };
+}
+
+async function waitSettled(cols) {
+  const start = Date.now();
+  for (;;) {
+    await new Promise(r => setTimeout(r, 500));
+    const quiet = cols.every(c => Date.now() - c.lastChange() > SETTLE_MS);
+    if (quiet && Object.keys(cols[0].items).length > 0) return;
+    if (Date.now() - start > TIMEOUT_MS) throw new Error('timed out waiting for sweep data');
+  }
+}
+
+async function run() {
+  if (!/^[A-Za-z0-9]{11}$/.test(modelId || '')) throw new Error('pass ?m=<11-char model id>');
+  document.getElementById('mid').textContent = modelId;
+  const iframe = document.getElementById('showcase');
+  iframe.src = `https://my.matterport.com/show?m=${modelId}&play=1&qs=1&applicationKey=${SDK_KEY}`;
+  await new Promise(r => iframe.addEventListener('load', r, { once: true }));
+
+  const sdk = await window.MP_SDK.connect(iframe, SDK_KEY, '');
+  log('connected; waiting for PLAYING');
+  await sdk.App.state.waitUntil(s => s.phase === sdk.App.Phase.PLAYING);
+
+  const sweeps = collect(sdk, 'Sweep');
+  const floors = collect(sdk, 'Floor');
+  const rooms = collect(sdk, 'Room');
+  await waitSettled([sweeps, floors, rooms]);
+  const details = await sdk.Model.getDetails();
+
+  const doc = {
+    schema_version: SCHEMA_VERSION,
+    source: {
+      kind: 'matterport-showcase-sdk',
+      model_id: modelId,
+      exported_at: new Date().toISOString(),
+      // third-party public model: attribute it, do not redistribute or commit
+      attribution: {
+        name: details.name ?? null,
+        presented_by: details.presentedBy ?? null,
+        share_url: details.shareUrl ?? `https://my.matterport.com/show?m=${modelId}`,
+      },
+    },
+    coordinate_frame: {
+      units: 'meters',
+      up_axis: 'z',
+      note: 'converted from SDK y-up: x=sdk.x, y=-sdk.z, z=sdk.y. position = camera; floor_position = puck on the floor.',
+    },
+    floors: Object.values(floors.items)
+      .map(f => ({ id: f.id, sequence: f.sequence, name: f.name ?? null }))
+      .sort((a, b) => a.sequence - b.sequence),
+    rooms: Object.values(rooms.items).map(r => ({
+      id: r.id,
+      label: r.label || null,
+      floor_id: r.floorInfo?.id ?? null,
+      center: toZUp(r.center),
+      bounds: boundsToZUp(r.bounds),
+      size: r.size && { x: r.size.x, y: r.size.z, z: r.size.y },
+    })),
+    sweeps: Object.values(sweeps.items).map(s => ({
+      id: s.sid ?? s.id,
+      uuid: s.uuid ?? null,
+      floor_id: s.floorInfo?.id ?? null,
+      floor_sequence: s.floorInfo?.sequence ?? null,
+      position: toZUp(s.position),
+      floor_position: toZUp(s.puckPosition),
+      neighbors: [...(s.neighbors || [])],
+      enabled: s.enabled !== false,
+      alignment: s.alignmentType ?? null,
+      placement: s.placementType ?? null,
+    })),
+  };
+  log(`collected ${doc.sweeps.length} sweeps, ${doc.floors.length} floors, ${doc.rooms.length} rooms; saving…`);
+
+  const res = await fetch('/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(doc) });
+  if (!res.ok) throw new Error(`save failed: ${res.status} ${await res.text()}`);
+  const saved = await res.json();
+  log(`saved ${saved.path}\n${JSON.stringify(saved.stats, null, 1)}`);
+  window.EXPORT_RESULT = { status: 'ok', ...saved };
+}
+
+run().catch(e => { log('ERROR: ' + (e?.message || e)); window.EXPORT_RESULT = { status: 'error', msg: String(e?.message || e) }; });
+</script>
+</body>
+</html>
