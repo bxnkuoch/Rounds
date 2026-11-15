@@ -16,6 +16,7 @@ from collections.abc import AsyncIterator, Callable
 from typing import Any, Literal
 
 import anthropic
+import anyio
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
@@ -114,23 +115,31 @@ class AgentRuntime:
     def _config(thread_id: str) -> dict:
         return {"configurable": {"thread_id": thread_id}}
 
-    async def _pending_interrupt(self, thread_id: str) -> Interrupt | None:
+    async def _pending(self, thread_id: str) -> tuple[Interrupt | None, ApprovalRequired | None]:
+        """The pending interrupt (from the checkpoint) and the approval card it maps to, if any.
+
+        Only an interrupt WITH a card blocks the thread: the user can see and decide it. A card-less one
+        (unknown plan, failing get_proposal) is auto-rejected at the start of the next run instead.
+        """
         if self._agent is None:  # no agent yet means no run has ever checkpointed
-            return None
+            return None, None
         snap = await self._agent.aget_state(self._config(thread_id))
-        return snap.interrupts[0] if snap.interrupts else None
+        if not snap.interrupts:
+            return None, None
+        intr = snap.interrupts[0]
+        return intr, self._approval_from_checkpoint(thread_id, intr, (snap.values or {}).get("messages", []))
 
     # -- preconditions (the route calls these before it starts a 200 stream) ------------
 
     async def check_run(self, thread_id: str) -> None:
-        if self._lock(thread_id).locked() or await self._pending_interrupt(thread_id) is not None:
+        if self._lock(thread_id).locked() or (await self._pending(thread_id))[1] is not None:
             raise ThreadBusy(thread_id)
 
     async def check_resume(self, thread_id: str, approval_id: str) -> Interrupt:
         if self._lock(thread_id).locked():
             raise ThreadBusy(thread_id)
-        intr = await self._pending_interrupt(thread_id)
-        if intr is None or intr.id != approval_id:
+        intr, card = await self._pending(thread_id)
+        if card is None or intr.id != approval_id:
             raise StaleApproval(approval_id)
         return intr
 
@@ -172,26 +181,29 @@ class AgentRuntime:
             raise ThreadBusy(thread_id)
         async with lock:
             # Re-check under the lock: the route's eager check may have raced another request.
-            if resume is None:
-                if await self._pending_interrupt(thread_id) is not None:
-                    raise ThreadBusy(thread_id)
-            else:
+            intr, card = await self._pending(thread_id)
+            if resume is not None:
                 approval_id, decision, note = resume
-                intr = await self._pending_interrupt(thread_id)
-                if intr is None or intr.id != approval_id:
+                if card is None or intr.id != approval_id:
                     raise StaleApproval(approval_id)
-                user_input = Command(resume={"decisions": self._decisions(intr, decision, note)})
+                inputs: list[Any] = [Command(resume={"decisions": self._decisions(intr, decision, note)})]
+            elif card is not None:
+                raise ThreadBusy(thread_id)
+            elif intr is not None:
+                # A card-less interrupt left by an earlier run: reject it first, then run the user's input.
+                inputs = [Command(resume={"decisions": _reject_all(intr)}), user_input]
+            else:
+                inputs = [user_input]
 
             tr = EventTranslator(thread_id, self.services)  # fresh per run: seq restarts at 0 (R7)
             yield tr.emit(RunStarted, run_id=uuid.uuid4().hex)
 
             try:
                 agent = self._get_agent()
+                build_error = None
             except Exception as exc:  # noqa: BLE001 - a broken model config must not crash the stream
                 log.warning("agent build failed: %s", type(exc).__name__)
                 agent, build_error = None, exc
-            else:
-                build_error = None
             if agent is None:
                 yield tr.emit(Error, code="model_unavailable", retryable=False,
                               message="The agent model is not configured (no API key). The rest of the app works."
@@ -200,40 +212,59 @@ class AgentRuntime:
                 return
 
             config = self._config(thread_id)
-            graph_input: Any = user_input
-            for _ in range(MAX_AUTO_REJECT_ROUNDS + 1):
+            auto_rejects = 0
+            while inputs:
+                graph_input = inputs.pop(0)
                 stream = agent.astream(graph_input, config, stream_mode=STREAM_MODE, subgraphs=True)
                 try:
                     async for chunk in stream:
                         for ev in tr.feed(chunk):
                             yield ev
-                    snap = await agent.aget_state(config)
+                    intr, card = await self._pending(thread_id)
                 except Exception as exc:  # noqa: BLE001 - every failure becomes an error event
                     log.warning("agent run failed on thread %s: %s", thread_id, type(exc).__name__)
                     yield tr.emit(Error, **_error_fields(exc))
-                    yield tr.emit(Done, status="completed")
+                    yield tr.emit(Done, status=await self._status_after_failure(thread_id))
                     return
                 finally:
-                    # On client disconnect (aclose / cancellation) this stops the graph run.
-                    await stream.aclose()
+                    # Disconnect (aclose / cancellation) stops the graph run here. Shielded, because under
+                    # anyio cancellation every await in this cleanup would otherwise be cancelled again,
+                    # leaving the model call running.
+                    with anyio.CancelScope(shield=True):
+                        await stream.aclose()
 
-                if not snap.interrupts:
-                    final = _final_text(snap.values.get("messages", []))
-                    if final:
-                        yield tr.emit(Message, text=final)
-                    yield tr.emit(Done, status="completed")
-                    return
-                intr = snap.interrupts[0]
-                if self._approval_from_checkpoint(thread_id, intr, snap.values.get("messages", [])) is not None:
+                if card is not None:
+                    if inputs:  # a new card appeared while clearing an old interrupt: the user decides first
+                        yield tr.emit(Error, code="input_not_sent", retryable=True,
+                                      message="A plan now needs approval, so your message was not sent. "
+                                              "Decide on the plan, then send it again.")
                     yield tr.emit(Done, status="awaiting_approval")
                     return
-                # No card can be shown (unknown plan_id; the translator already emitted `unknown_plan`).
-                # Reject every request ourselves so the thread is not stuck on an invisible approval.
-                graph_input = Command(resume={"decisions": _reject_all(intr)})
+                if intr is not None:
+                    # No card can be shown (the translator already emitted `unknown_plan`). Reject it
+                    # ourselves; past the limit, leave it: the next run_* clears it before running.
+                    auto_rejects += 1
+                    if auto_rejects > MAX_AUTO_REJECT_ROUNDS:
+                        yield tr.emit(Error, code="unknown_plan", retryable=False,
+                                      message="The agent kept requesting approval for plans that do not exist. "
+                                              "Nothing was applied.")
+                        yield tr.emit(Done, status="completed")
+                        return
+                    inputs.insert(0, Command(resume={"decisions": _reject_all(intr)}))
 
-            yield tr.emit(Error, code="unknown_plan", retryable=False,
-                          message="The agent kept requesting approval for plans that do not exist.")
-            yield tr.emit(Done, status="awaiting_approval")
+            snap = await agent.aget_state(config)
+            final = _final_text((snap.values or {}).get("messages", []))
+            if final:
+                yield tr.emit(Message, text=final)
+            yield tr.emit(Done, status="completed")
+
+    async def _status_after_failure(self, thread_id: str) -> str:
+        """Done.status after an error must reflect the checkpoint: a usable card means awaiting_approval."""
+        try:
+            _, card = await self._pending(thread_id)
+        except Exception:  # noqa: BLE001
+            return "completed"
+        return "awaiting_approval" if card is not None else "completed"
 
     # -- state -------------------------------------------------------------------------
 
@@ -263,7 +294,8 @@ class AgentRuntime:
             return None
         try:
             diff = self.services.get_proposal(plan_id).diff
-        except KeyError:
+        except Exception:  # noqa: BLE001 - unknown plan or broken services: no card, never a crash
+            log.warning("get_proposal(%r) failed; no approval card", plan_id)
             return None
         last_ai = next((m for m in reversed(messages) if isinstance(m, AIMessage) and _text(m.content)), None)
         return ApprovalRequired(
@@ -277,8 +309,9 @@ def _reject_all(intr: Interrupt) -> list[dict]:
     for action in intr.value.get("action_requests", []):
         args = action.get("args")
         plan_id = args.get("plan_id") if isinstance(args, dict) else None
-        out.append({"type": "reject", "message": f"ERROR: plan_id {plan_id!r} does not exist. Nothing was applied. "
-                                                 "Ask the scheduler to propose a plan first."})
+        out.append({"type": "reject", "message": f"ERROR: plan_id {plan_id!r} does not exist or could not be "
+                                                 "loaded for approval. Nothing was applied. Ask the scheduler "
+                                                 "to propose a plan first."})
     return out
 
 

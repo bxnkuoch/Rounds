@@ -3,6 +3,7 @@
 The ScriptedChatModel is shared by the coordinator and its subagents, so scripts are in call order.
 """
 import asyncio
+from typing import Any
 
 import anthropic
 import httpx2
@@ -406,3 +407,144 @@ def test_unknown_plan_interrupt_is_auto_rejected_not_wedged():
         assert h.client.get(f"/agent/threads/{tid}/state").json()["pending_approval"] is None
         assert h.message(tid, "hello")[-1].status == "completed"  # not 409
     assert h.fake.apply_calls == []
+
+
+# --- fix round 1: card-less interrupts never wedge; error path reports the real status -------
+
+def _assert_thread_usable(h: Harness, tid: str, reply: str):
+    r = h.client.get(f"/agent/threads/{tid}/state")
+    assert r.status_code == 200 and r.json()["pending_approval"] is None
+    events = h.message(tid, "hello")  # not 409
+    assert events[-1].status == "completed" and events[-2].text == reply
+    humans = [m.content for m in h.model.calls[-1] if isinstance(m, HumanMessage)]
+    assert humans[-1] == "hello"  # the user's input really ran
+
+
+def test_get_proposal_raising_never_wedges():
+    """Services whose get_proposal raises anything (StubServices: NotImplementedError) give no card."""
+    script = [call("apply_plan", {"plan_id": "P-1"}, "apply-x"), say("Could not load the plan."), say("Hi.")]
+    with Harness(script) as h:
+        def broken(plan_id):
+            raise NotImplementedError("owned by Benjamin")
+        h.fake.get_proposal = broken
+        tid = h.thread()
+        events = h.message(tid)
+        assert "approval_required" not in types(events)
+        assert any(e.type == "error" and e.code == "unknown_plan" for e in events)
+        assert events[-1].status == "completed"
+        _assert_thread_usable(h, tid, "Hi.")
+    assert h.fake.apply_calls == []
+
+
+def test_auto_reject_limit_then_next_message_recovers():
+    bad = [call("apply_plan", {"plan_id": "P-404"}, f"apply-{i}") for i in range(3)]  # initial + 2 auto rounds
+    with Harness(bad + [say("Noted, nothing applied."), say("Hi.")]) as h:
+        tid = h.thread()
+        events = h.message(tid)
+        assert [e.code for e in events if e.type == "error"][-1] == "unknown_plan"
+        assert events[-1].type == "done" and events[-1].status == "completed"
+        # the card-less interrupt is still in the checkpoint, but it must not block
+        _assert_thread_usable(h, tid, "Hi.")
+    assert h.fake.apply_calls == []
+
+
+def test_error_after_interrupt_reports_awaiting_approval(monkeypatch):
+    """A failure after the approval pause was checkpointed: Done says awaiting_approval and the card is usable."""
+    import app.agents.runtime as runtime_mod
+
+    real_feed = runtime_mod.EventTranslator.feed
+
+    def feed(self, chunk):
+        if chunk[1] == "updates" and isinstance(chunk[2], dict) and "__interrupt__" in chunk[2]:
+            raise RuntimeError("translator bug")
+        return real_feed(self, chunk)
+
+    monkeypatch.setattr(runtime_mod.EventTranslator, "feed", feed)
+    with Harness(until_interrupt() + [say("Applied P-1.")]) as h:
+        tid = h.thread()
+        events = h.message(tid)
+        assert events[-2].type == "error" and events[-2].code == "internal_error"
+        assert events[-1].status == "awaiting_approval"
+        card = h.client.get(f"/agent/threads/{tid}/state").json()["pending_approval"]
+        assert card is not None and card["plan_id"] == "P-1"
+        assert h.client.post(f"/agent/threads/{tid}/messages", json={"text": "x"}).status_code == 409
+        monkeypatch.setattr(runtime_mod.EventTranslator, "feed", real_feed)
+        assert h.approve(tid, card["approval_id"])[-1].status == "completed"
+    assert h.fake.apply_calls == ["P-1"]
+
+
+# --- fix round 1: disconnect through the real Starlette response (Review Focus 5) ------------
+
+class BlockingModel(ScriptedChatModel):
+    """The model call hangs until cancelled, like a slow Anthropic request."""
+
+    started: Any = None
+    cancelled: Any = None
+
+    async def _hang(self, messages):
+        self.calls.append(list(messages))
+        self.started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            self.cancelled.set()
+            raise
+
+    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+        await self._hang(messages)
+
+    async def _astream(self, messages, stop=None, run_manager=None, **kwargs):
+        await self._hang(messages)
+        yield  # pragma: no cover
+
+
+@pytest.mark.parametrize("spec_version", ["2.3", "2.4"])
+def test_http_disconnect_cancels_run_and_releases_lock(spec_version):
+    async def scenario():
+        fake = FakeServices()
+        model = BlockingModel([], started=asyncio.Event(), cancelled=asyncio.Event())
+        rt = AgentRuntime(fake, lambda: model)
+        app = FastAPI()
+        app.include_router(router)
+        app.state.agent_runtime = rt
+        tid = rt.create_thread()
+
+        body = b'{"text": "Plan the shift."}'
+        disconnect = asyncio.Event()
+        request_sent = False
+
+        async def receive():
+            nonlocal request_sent
+            if not request_sent:
+                request_sent = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            await disconnect.wait()
+            return {"type": "http.disconnect"}
+
+        sent: list[dict] = []
+
+        async def send(message):
+            if disconnect.is_set() and spec_version >= "2.4":
+                raise OSError("client gone")
+            sent.append(message)
+
+        scope = {
+            "type": "http", "asgi": {"version": "3.0", "spec_version": spec_version}, "http_version": "1.1",
+            "method": "POST", "scheme": "http", "path": f"/agent/threads/{tid}/messages",
+            "raw_path": f"/agent/threads/{tid}/messages".encode(), "root_path": "", "query_string": b"",
+            "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())],
+            "client": ("test", 1), "server": ("test", 80),
+        }
+        call_task = asyncio.create_task(app(scope, receive, send))
+        await asyncio.wait_for(model.started.wait(), 5)  # the run is mid model call
+        assert rt._locks[tid].locked()
+        disconnect.set()                                 # client goes away; no further event is ever produced
+        await asyncio.wait_for(call_task, 5)
+        assert model.cancelled.is_set()                  # the model call was cancelled, not left running
+        assert not rt._locks[tid].locked()
+        await rt.check_run(tid)                          # a follow-up message would not be 409
+        assert sent[0]["type"] == "http.response.start" and sent[0]["status"] == 200
+        assert b"run_started" in b"".join(m.get("body", b"") for m in sent)
+        assert fake.apply_calls == []
+
+    asyncio.run(scenario())

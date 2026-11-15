@@ -171,7 +171,7 @@ class EventTranslator:
                 if not isinstance(plan_id, str):
                     raise KeyError(plan_id)
                 diff = self.services.get_proposal(plan_id).diff
-            except KeyError:
+            except Exception:  # noqa: BLE001 - unknown plan or broken services: an error event, never a raise
                 return [self.emit(Error, source=source, code="unknown_plan", retryable=False,
                                   message=f"Proposal {plan_id!r} does not exist.")]
             return [self.emit(

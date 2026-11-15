@@ -267,3 +267,14 @@ def test_integration_parallel_subagent_sources():
     assert by[("tool_call", "task")] == by[("tool_result", "task")] == "coordinator"
     assert {e.subagent for e in events if e.type == "subagent_finished"} == {"scheduler", "general-purpose"}
     assert "".join(e.text for e in events if e.type == "token") == "All done."
+
+
+def test_interrupt_any_get_proposal_failure_is_error_not_raise():
+    fake, t = tr()
+
+    def broken(plan_id):
+        raise NotImplementedError("owned by Benjamin")
+
+    fake.get_proposal = broken
+    (ev,) = t.feed(interrupt_chunk({"plan_id": "P-1"}))
+    assert isinstance(ev, Error) and ev.code == "unknown_plan" and ev.retryable is False

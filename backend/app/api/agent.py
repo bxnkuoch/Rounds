@@ -6,10 +6,15 @@ the client gets a real status code instead of a 200 with an error in the body.
 from collections.abc import AsyncIterator
 from typing import Literal
 
+import asyncio
+
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from starlette.types import Receive, Scope, Send
 
+from app.agents.translator import COORDINATOR
 from app.agents.runtime import AgentRuntime, StaleApproval, ThreadBusy, ThreadState, UnknownThread
 from app.models.agent_events import AgentEvent, Done, Error, to_sse
 from app.models.domain import ReplanEvent
@@ -45,6 +50,42 @@ async def _guard(check) -> None:
         raise HTTPException(409, "approval is stale or unknown") from None
 
 
+class RunStreamingResponse(StreamingResponse):
+    """StreamingResponse that cancels the run as soon as the client disconnects, on every ASGI spec version.
+
+    Starlette 1.10 only listens for `http.disconnect` when spec_version < 2.4. On >= 2.4 a disconnect shows up
+    only as an OSError on the next send, which may never come while a model call is in flight, and the body
+    iterator is left to the async-gen finalizer. Here the stream always races a disconnect listener.
+
+    The stream runs in its own asyncio task and is cancelled ONCE with task.cancel(). Starlette's anyio
+    cancel scope re-delivers cancellation at every await, which interrupts LangGraph's own astream cleanup
+    before it cancels the in-flight node (the model call kept running). The final close is shielded, so the
+    run generator's `finally` always runs and the thread lock is always released.
+    """
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        async def stream() -> None:
+            try:
+                await self.stream_response(send)
+            except OSError:
+                pass  # client went away mid-send
+
+        stream_task = asyncio.ensure_future(stream())
+        watch_task = asyncio.ensure_future(self.listen_for_disconnect(receive))
+        try:
+            await asyncio.wait({stream_task, watch_task}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            with anyio.CancelScope(shield=True):
+                for task in (stream_task, watch_task):
+                    task.cancel()
+                await asyncio.gather(stream_task, watch_task, return_exceptions=True)
+                await self.body_iterator.aclose()
+        if not stream_task.cancelled() and stream_task.exception() is not None:
+            raise stream_task.exception()  # a real failure, not a disconnect: let the server see it
+        if self.background is not None:
+            await self.background()
+
+
 def _sse(thread_id: str, events: AsyncIterator[AgentEvent]) -> StreamingResponse:
     async def body() -> AsyncIterator[str]:
         try:
@@ -52,16 +93,18 @@ def _sse(thread_id: str, events: AsyncIterator[AgentEvent]) -> StreamingResponse
                 yield to_sse(ev)
         except (ThreadBusy, StaleApproval) as exc:
             # Lost a race with another request after the eager check passed: report it in-stream.
-            code = "thread_busy" if isinstance(exc, ThreadBusy) else "stale_approval"
-            yield to_sse(Error(thread_id=thread_id, seq=0, source="coordinator", code=code, retryable=False,
-                               message="Another request is using this thread."
-                               if code == "thread_busy" else "This approval is no longer pending."))
-            yield to_sse(Done(thread_id=thread_id, seq=1, source="coordinator", status="completed"))
+            busy = isinstance(exc, ThreadBusy)
+            yield to_sse(Error(thread_id=thread_id, seq=0, source=COORDINATOR, retryable=False,
+                               code="thread_busy" if busy else "stale_approval",
+                               message="Another request is using this thread." if busy
+                               else "This approval is no longer pending."))
+            yield to_sse(Done(thread_id=thread_id, seq=1, source=COORDINATOR, status="completed"))
         finally:
-            await events.aclose()  # disconnect: stops the agent run and releases the thread lock
+            with anyio.CancelScope(shield=True):
+                await events.aclose()  # stops the agent run and releases the thread lock
 
-    return StreamingResponse(body(), media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    return RunStreamingResponse(body(), media_type="text/event-stream",
+                                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @router.post("/threads")
