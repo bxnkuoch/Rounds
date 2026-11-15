@@ -59,6 +59,27 @@ class Room:
 
 
 @dataclass(frozen=True)
+class Place:
+    """A named location from the model itself: a floor-plan Label
+    ("Nurses Station", "Room 4") or a Tag/Mattertag pin ("Dirty Utility").
+
+    These come from the model author, so they're real, not synthetic. Some
+    labels are area headings ("Side Rooms (5 - 8)") rather than single rooms,
+    and names can repeat ("5 Bed Bays with Showers" appears 4 times), so
+    always address a place by `id`.
+    """
+    id: str
+    name: str
+    kind: str  # "label" | "tag"
+    floor_id: str | None
+    x: float
+    y: float
+    z: float
+    room_id: str | None  # room whose bounds contain the place, if any
+    node_id: str  # graph node to route to/from for this place
+
+
+@dataclass(frozen=True)
 class Floor:
     id: str
     sequence: int
@@ -74,8 +95,14 @@ class NavGraph:
     source: dict = field(default_factory=dict)
     # sweep id -> reason it was not added as a node (reported, never silent)
     dropped: dict[str, str] = field(default_factory=dict)
+    places: dict[str, Place] = field(default_factory=dict)
 
     # ---- queries -----------------------------------------------------------
+
+    def find_places(self, query: str) -> list[Place]:
+        """Case-insensitive substring match on place names, sorted by name then id."""
+        q = query.casefold()
+        return sorted((p for p in self.places.values() if q in p.name.casefold()), key=lambda p: (p.name, p.id))
 
     def edge_length(self, a: str, b: str) -> float | None:
         return self.adjacency.get(a, {}).get(b)
@@ -219,11 +246,10 @@ def load_nav_graph(path: str | Path) -> NavGraph:
         raw_nodes[s["id"]] = Node(s["id"], s.get("floor_id"), s.get("floor_sequence"), x, y, z)
 
     # Room assignment: smallest room footprint on the same floor that contains the node.
-    nodes: dict[str, Node] = {}
-    for n in raw_nodes.values():
-        hits = [r for r in rooms.values() if r.floor_id == n.floor_id and r.contains(n.x, n.y, n.z)]
-        room_id = min(hits, key=lambda r: (r.footprint_area, r.id)).id if hits else None
-        nodes[n.id] = Node(n.id, n.floor_id, n.floor_sequence, n.x, n.y, n.z, room_id)
+    nodes: dict[str, Node] = {
+        n.id: Node(n.id, n.floor_id, n.floor_sequence, n.x, n.y, n.z, _room_at(rooms, n.floor_id, n.x, n.y, n.z))
+        for n in raw_nodes.values()
+    }
 
     # Undirected edges; links to dropped or unknown sweeps are ignored.
     adjacency: dict[str, dict[str, float]] = {nid: {} for nid in nodes}
@@ -239,5 +265,43 @@ def load_nav_graph(path: str | Path) -> NavGraph:
             adjacency[a][b] = w
             adjacency[b][a] = w
 
+    places = _load_places(doc, nodes, rooms)
+
     return NavGraph(nodes=nodes, adjacency=adjacency, rooms=rooms, floors=floors,
-                    source=doc.get("source", {}), dropped=dropped)
+                    source=doc.get("source", {}), dropped=dropped, places=places)
+
+
+def _room_at(rooms: dict[str, Room], floor_id: str | None, x: float, y: float, z: float) -> str | None:
+    hits = [r for r in rooms.values() if r.floor_id == floor_id and r.contains(x, y, z)]
+    return min(hits, key=lambda r: (r.footprint_area, r.id)).id if hits else None
+
+
+def _load_places(doc: dict, nodes: dict[str, Node], rooms: dict[str, Room]) -> dict[str, Place]:
+    """Labels and tags become Places snapped to a graph node.
+
+    Snapping: if the place is inside a room that has nodes, use the nearest
+    node in that room (so "Room 4" routes into room 4, not to a closer corridor
+    point through the wall). Otherwise use the nearest node on its floor.
+    Tags carry no floor, so they take the floor of the nearest node in 3D.
+    """
+    if not nodes:
+        return {}
+    raw = [(l["id"], l["text"], "label", l.get("floor_id"), l["position"]) for l in doc.get("labels", [])
+           if l.get("text") and l.get("position") and l.get("visible", True)]
+    raw += [(t["id"], t["label"], "tag", None, t["position"]) for t in doc.get("tags", [])
+            if t.get("label") and t.get("position")]
+
+    def nearest(cands, x, y, z):
+        return min(cands, key=lambda n: (math.dist((n.x, n.y, n.z), (x, y, z)), n.id))
+
+    places: dict[str, Place] = {}
+    for pid, name, kind, floor_id, pos in raw:
+        x, y, z = _xyz(pos)
+        if floor_id is None:
+            floor_id = nearest(nodes.values(), x, y, z).floor_id
+        room_id = _room_at(rooms, floor_id, x, y, z)
+        in_room = [n for n in nodes.values() if room_id and n.room_id == room_id]
+        on_floor = [n for n in nodes.values() if n.floor_id == floor_id] or list(nodes.values())
+        node = nearest(in_room or on_floor, x, y, z)
+        places[pid] = Place(pid, name.strip(), kind, floor_id, x, y, z, room_id, node.id)
+    return places

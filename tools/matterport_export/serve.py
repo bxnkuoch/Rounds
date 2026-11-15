@@ -95,6 +95,8 @@ def summarize(doc: dict) -> dict:
         "floors": len(doc["floors"]),
         "rooms": len(doc["rooms"]),
         "labeled_rooms": sum(1 for r in doc["rooms"] if r.get("label")),
+        "labels": len(doc.get("labels", [])),
+        "tags": len(doc.get("tags", [])),
     }
 
 

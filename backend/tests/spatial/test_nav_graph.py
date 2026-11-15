@@ -43,8 +43,10 @@ def room(rid, xmin, ymin, xmax, ymax, label=None, floor=FLOOR):
     }
 
 
-def write_doc(tmp_path: Path, sweeps, rooms=(), floors=None) -> Path:
+def write_doc(tmp_path: Path, sweeps, rooms=(), floors=None, labels=None, tags=None) -> Path:
     doc = {
+        **({"labels": labels} if labels is not None else {}),
+        **({"tags": tags} if tags is not None else {}),
         "schema_version": 1,
         "source": {"kind": "matterport-showcase-sdk", "model_id": "TESTMODEL01", "attribution": {"name": "fixture"}},
         "coordinate_frame": {"units": "meters", "up_axis": "z"},
@@ -174,6 +176,52 @@ def test_rejects_unknown_schema(tmp_path):
         load_nav_graph(p)
 
 
+def label(lid, text, x, y, floor=FLOOR, visible=True):
+    return {"id": lid, "text": text, "visible": visible, "floor_id": floor, "position": {"x": x, "y": y, "z": 0.0}}
+
+
+def tag(tid, text, x, y, z=0.0):
+    return {"id": tid, "label": text, "description": None, "room_id": None, "position": {"x": x, "y": y, "z": z}}
+
+
+def test_places_loaded_and_snapped_to_nearest_node(tmp_path):
+    g = load_nav_graph(write_doc(tmp_path, [
+        sweep("A", 0, 0, ["B"]), sweep("B", 10, 0, ["A"]),
+    ], labels=[label("l1", " Nurses Station ", 9, 1)], tags=[tag("t1", "Dirty Utility", 1, 0.5)]))
+    ns = g.places["l1"]
+    assert (ns.name, ns.kind, ns.node_id, ns.floor_id) == ("Nurses Station", "label", "B", FLOOR)
+    du = g.places["t1"]
+    assert (du.kind, du.node_id, du.floor_id) == ("tag", "A", FLOOR)  # tag floor inferred
+
+
+def test_place_inside_room_snaps_into_that_room(tmp_path):
+    # corridor node C is closer to the label, but the label sits in room r4,
+    # whose only node is R; routing to "Room 4" must end inside the room.
+    g = load_nav_graph(write_doc(tmp_path, [
+        sweep("C", 0, 0, ["R"]), sweep("R", 4, 0, ["C"]),
+    ], rooms=[room("r4", 1, -1, 6, 1)], labels=[label("l4", "Room 4", 1.2, 0)]))
+    assert g.places["l4"].room_id == "r4"
+    assert g.places["l4"].node_id == "R"
+
+
+def test_hidden_and_empty_labels_skipped(tmp_path):
+    g = load_nav_graph(write_doc(tmp_path, [sweep("A", 0, 0, [])],
+                                 labels=[label("h", "Hidden", 0, 0, visible=False), label("e", "", 0, 0)]))
+    assert g.places == {}
+
+
+def test_missing_labels_and_tags_ok(corridor):
+    assert corridor.places == {}
+
+
+def test_find_places_case_insensitive_and_duplicates(tmp_path):
+    g = load_nav_graph(write_doc(tmp_path, [sweep("A", 0, 0, [])], labels=[
+        label("b1", "5 Bed Bays with Showers", 0, 0), label("b2", "5 Bed Bays with Showers", 0, 0),
+        label("n", "Nurses Station", 0, 0)]))
+    assert [p.id for p in g.find_places("bed bays")] == ["b1", "b2"]
+    assert [p.id for p in g.find_places("NURSES")] == ["n"]
+
+
 AIREDALE = Path(__file__).resolve().parents[3] / "data" / "raw" / "matterport" / "6Ee2LwLfx58.json"
 
 
@@ -186,3 +234,8 @@ def test_airedale_export_loads_connected():
     ids = sorted(g.nodes)[:10]
     m = g.distance_matrix(ids)
     assert all(math.isfinite(v) for row in m for v in row)
+    # labels/tags were added to the exporter later; older exports have none
+    if g.places:
+        assert len(g.places) == 38
+        assert [p.kind for p in g.find_places("Nurses Station")] == ["label"]
+        assert all(p.node_id in g.nodes for p in g.places.values())

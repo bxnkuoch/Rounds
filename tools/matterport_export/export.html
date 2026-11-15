@@ -68,7 +68,11 @@ async function run() {
   const sweeps = collect(sdk, 'Sweep');
   const floors = collect(sdk, 'Floor');
   const rooms = collect(sdk, 'Room');
+  // Labels = floor-plan text ("Nurses Station", "Room 4"); Tags = pins (Mattertags).
+  const labels = collect(sdk, 'Label');
+  const tags = collect(sdk, 'Tag');
   await waitSettled([sweeps, floors, rooms]);
+  await new Promise(r => setTimeout(r, 1000)); // labels/tags may legitimately be empty
   const details = await sdk.Model.getDetails();
 
   const doc = {
@@ -100,6 +104,20 @@ async function run() {
       bounds: boundsToZUp(r.bounds),
       size: r.size && { x: r.size.x, y: r.size.z, z: r.size.y },
     })),
+    labels: Object.values(labels.items).map(l => ({
+      id: l.sid,
+      text: l.text,
+      visible: l.visible !== false,
+      floor_id: l.floorInfo?.id ?? null,
+      position: toZUp(l.position),
+    })),
+    tags: Object.values(tags.items).map(t => ({
+      id: t.id,
+      label: t.label || null,
+      description: t.description || null,
+      room_id: t.roomId || null,
+      position: toZUp(t.anchorPosition),
+    })),
     sweeps: Object.values(sweeps.items).map(s => ({
       id: s.sid ?? s.id,
       uuid: s.uuid ?? null,
@@ -113,7 +131,7 @@ async function run() {
       placement: s.placementType ?? null,
     })),
   };
-  log(`collected ${doc.sweeps.length} sweeps, ${doc.floors.length} floors, ${doc.rooms.length} rooms; saving…`);
+  log(`collected ${doc.sweeps.length} sweeps, ${doc.floors.length} floors, ${doc.rooms.length} rooms, ${doc.labels.length} labels, ${doc.tags.length} tags; saving…`);
 
   const res = await fetch('/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(doc) });
   if (!res.ok) throw new Error(`save failed: ${res.status} ${await res.text()}`);
