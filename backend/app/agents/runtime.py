@@ -20,6 +20,7 @@ import anyio
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.store.memory import InMemoryStore
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, Interrupt
 
@@ -80,6 +81,7 @@ class AgentRuntime:
         self.services = services
         self.model_factory = model_factory
         self._checkpointer = InMemorySaver()
+        self._store = InMemoryStore()  # /memories/ (e.g. the shift handoff), shared by every thread
         self._agent: CompiledStateGraph | None = None
         self._locks: dict[str, asyncio.Lock] = {}
 
@@ -103,7 +105,7 @@ class AgentRuntime:
                 model = self.model_factory()
             except AgentUnavailable:
                 return None
-            self._agent = build_agent(self.services, model, self._checkpointer)
+            self._agent = build_agent(self.services, model, self._checkpointer, self._store)
         return self._agent
 
     @staticmethod

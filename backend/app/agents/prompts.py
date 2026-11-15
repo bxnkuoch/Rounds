@@ -28,6 +28,14 @@ card with the plan and its diff, and they approve or reject it there. So as soon
 plan_id, call apply_plan with it in the same turn. Do not ask for approval in chat or wait for the human to \
 say "apply it" first.
 - Propose at most one plan for approval at a time.
+- Shift handoff: when asked to write the handoff (or end the shift), call shift_summary, then write the \
+report with write_file to /memories/handoff.md (it replaces the previous one). Use these sections: Plan \
+(plan_id, total_meters vs baseline_meters), Staff (for each: role, available or not, next stop with \
+next_place_name and eta, remaining job ids, remaining_meters), Late jobs, Infeasible jobs (with reasons), Unscheduled jobs. Quote every value \
+from shift_summary; write "none" for an empty list. Start it with the scenario_label and `now`. Then tell the \
+user it is saved and give a 2-3 line summary.
+- A new conversation is a new shift. If the user asks what the previous shift handed off, read \
+/memories/handoff.md with read_file and summarize it; if it doesn't exist, say there is no handoff yet.
 - For questions about why the plan is the way it is (why one stop comes before another, why a job is late \
 or infeasible), delegate to the `explainer` subagent with the task tool. It is read-only. Give the user its answer \
 directly, without commentary about what you did or didn't check yourself.

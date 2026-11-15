@@ -3,6 +3,7 @@ import uuid
 
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.store.memory import InMemoryStore
 from langgraph.types import Interrupt
 
 from app.agents.coordinator import build_agent
@@ -166,7 +167,7 @@ def test_integration_scripted_run():
         call("apply_plan", {"plan_id": "P-1"}, "apply-1"),
     ]
     fake = FakeServices()
-    agent = build_agent(fake, ScriptedChatModel(script), InMemorySaver())
+    agent = build_agent(fake, ScriptedChatModel(script), InMemorySaver(), InMemoryStore())
     t = EventTranslator("t-int", fake)
     events = []
     for chunk in agent.stream(
@@ -250,7 +251,7 @@ def test_integration_parallel_subagent_sources():
         "gp": [tcs(("list_jobs", {}, "lj")), AIMessage(content="gp done")],
     })
     fake = FakeServices()
-    agent = build_agent(fake, model, InMemorySaver())
+    agent = build_agent(fake, model, InMemorySaver(), InMemoryStore())
     t = EventTranslator("t-par", fake)
     events = []
     for chunk in agent.stream(

@@ -60,7 +60,7 @@ Rounds tells each staff member **what to do next, when, and the best way to get 
 | Track | What we show |
 |---|---|
 | **Healthcare (main)** | A real patient-flow bottleneck; measurable on-time and walking improvements against a baseline; human approval for every change |
-| **LangChain: Best Use of DeepAgents** | Visible todo plan, subagent handoffs (spatial / scheduler / explainer), human-in-the-loop interrupts, a filesystem-written shift handoff report, and memory across shifts |
+| **LangChain: Best Use of DeepAgents** | Visible todo plan, subagent handoffs (scheduler / explainer), human-in-the-loop interrupts, a shift handoff report written with the Deep Agents filesystem, and memory across shifts: the handoff lives under `/memories/` in a LangGraph store, so the next shift's conversation can read it (in memory for the demo, so a server restart clears it) |
 | **CoStar: Inside & Out** | Matterport digital twin → navigation graph (the real walkable paths between rooms of a one-floor hospital unit) plus CoStar building data for context. The data shapes the route; it isn't decoration |
 
 ## 2-minute demo script

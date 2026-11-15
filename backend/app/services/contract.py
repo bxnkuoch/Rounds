@@ -1,7 +1,9 @@
 # v0: provisional, Benjamin to confirm
 from typing import Protocol
 
-from app.models.domain import Job, Place, Plan, Proposal, ReplanEvent, Route, StaffMember, SwapComparison
+from app.models.domain import (
+    Job, Place, Plan, Proposal, ReplanEvent, Route, ShiftSummary, StaffMember, SwapComparison,
+)
 
 
 class Services(Protocol):
@@ -34,4 +36,9 @@ class Services(Protocol):
         """Read-only: the staff member's current order vs the same jobs with job_a and job_b swapped.
         Raises KeyError for an unknown staff id; ValueError if there's no current plan or a job isn't on
         that staff member's route."""
+        ...
+
+    def shift_summary(self) -> ShiftSummary:
+        """Read-only facts for the shift handoff report (remaining work per staff, late, infeasible,
+        unscheduled)."""
         ...

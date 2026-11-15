@@ -103,6 +103,10 @@ def build_tools(services: Services) -> dict[str, BaseTool]:
               "job_b swapped, replayed with the optimizer's travel model. Returns both orders' stops, total_meters "
               "and late jobs, plus meters_delta and late_jobs_delta (swapped minus current). Changes nothing.",
               _CompareSwap),
+        _wrap("shift_summary", services.shift_summary,
+              "Read-only facts for the shift handoff: each staff member's remaining jobs, next stop and remaining "
+              "meters after the current time, plus late, infeasible and unscheduled jobs and the plan's meters vs "
+              "baseline.", _NoArgs),
         _wrap("apply_plan", lambda plan_id: services.apply_plan(plan_id),
               "Apply a previously proposed plan by plan_id. Requires human approval.", _Apply),
     ]

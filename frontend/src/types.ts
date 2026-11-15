@@ -46,6 +46,27 @@ export type Infeasible = { job_id: string; reason: string }
 export type LateJob = { job_id: string; minutes_late: number }
 export type Baseline = { total_meters: number; late_jobs: number }
 
+export type StaffShiftSummary = {
+  staff_id: string
+  role: string
+  available: boolean
+  remaining_job_ids: string[]
+  next_stop: Stop | null
+  next_place_name: string | null
+  remaining_meters: number
+}
+export type ShiftSummary = {
+  scenario_label: string
+  now: string
+  plan_id: string | null
+  staff: StaffShiftSummary[]
+  late: LateJob[]
+  infeasible: Infeasible[]
+  unscheduled_job_ids: string[]
+  total_meters: number | null
+  baseline_meters: number | null
+}
+
 export type OrderOutcome = { job_ids: string[]; stops: Stop[]; total_meters: number; late: LateJob[] }
 export type SwapComparison = {
   plan_id: string

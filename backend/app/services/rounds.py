@@ -14,7 +14,8 @@ import threading
 from datetime import datetime
 
 from app.models.domain import (
-    Job, JobAdded, Place, Plan, Proposal, ReplanEvent, Route, StaffMember, StaffUnavailable, SwapComparison,
+    Job, JobAdded, Place, Plan, Proposal, ReplanEvent, Route, ShiftSummary, StaffMember, StaffShiftSummary, StaffUnavailable,
+    SwapComparison,
 )
 from app.optimization import DEFAULT_WALKING_SPEED_MPS
 from app.services.planning import make_diff, replay_order, solve_plan
@@ -115,6 +116,30 @@ class RoundsServices:
                                   current_order=current, swapped_order=other,
                                   meters_delta=round(other.total_meters - current.total_meters, 2),
                                   late_jobs_delta=len(other.late) - len(current.late))
+
+    def shift_summary(self) -> ShiftSummary:
+        """Read-only facts for the handoff: what's left for each staff member after `now`, and what's late,
+        infeasible or not yet planned."""
+        with self._lock:
+            plan = self.get_current_plan()
+            by_staff = {a.staff_id: a.stops for a in plan.assignments} if plan else {}
+            staff = []
+            for s in self._staff.values():
+                left = [x for x in by_staff.get(s.id, []) if x.eta >= self._now]
+                staff.append(StaffShiftSummary(
+                    staff_id=s.id, role=s.role, available=s.id not in self._unavailable,
+                    remaining_job_ids=list(dict.fromkeys(x.job_id for x in left)),
+                    next_stop=left[0] if left else None,
+                    next_place_name=self._places[left[0].place_id].name if left else None,
+                    remaining_meters=round(sum(x.meters_from_prev for x in left), 2)))
+            planned = {x.job_id for stops in by_staff.values() for x in stops}
+            return ShiftSummary(
+                scenario_label=self.scenario_label, now=self._now, plan_id=plan.id if plan else None, staff=staff,
+                late=plan.late if plan else [], infeasible=plan.infeasible if plan else [],
+                unscheduled_job_ids=sorted(j.id for j in self._jobs.values()
+                                           if j.status in _ACTIVE and j.id not in planned),
+                total_meters=plan.total_meters if plan else None,
+                baseline_meters=plan.baseline.total_meters if plan and plan.baseline else None)
 
     # ---- proposals (no side effects on the schedule) -------------------------
 
