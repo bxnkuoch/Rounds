@@ -54,6 +54,11 @@ class Infeasible(BaseModel):
     reason: str
 
 
+class LateJob(BaseModel):
+    job_id: str
+    minutes_late: int
+
+
 class Baseline(BaseModel):
     total_meters: float
     late_jobs: int
@@ -66,6 +71,8 @@ class Plan(BaseModel):
     infeasible: list[Infeasible]
     total_meters: float
     baseline: Baseline | None
+    # Additive (Benjamin): scheduled jobs that miss their deadline. Unscheduled ones stay in `infeasible`.
+    late: list[LateJob] = Field(default_factory=list)
 
 
 class PlanDiff(BaseModel):
