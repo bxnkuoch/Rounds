@@ -29,7 +29,7 @@ The return value is a LangGraph `CompiledStateGraph`, so streaming, checkpointin
 from deepagents import create_deep_agent
 
 agent = create_deep_agent(
-    model=...,            # "provider:model" string or a chat model instance (e.g. Bedrock)
+    model=...,            # "provider:model" string or a chat model instance (we use "anthropic:claude-haiku-5-5")
     tools=[...],          # plain functions work; schema comes from type hints and the docstring
     system_prompt="...",
     subagents=[...],      # list of dicts (see below)
@@ -83,11 +83,11 @@ Rounds Coordinator (main deep agent)
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
 from langchain.agents.middleware import TodoListMiddleware
-from langchain_aws import ChatBedrockConverse          # Amazon track
+from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.store.memory import InMemoryStore
 
-model = ChatBedrockConverse(model="<bedrock model id>")  # same model serves the Amazon + LangChain tracks
+model = init_chat_model("anthropic:claude-haiku-5-5")  # see backend/app/agents/model.py (AGENT_MODEL)
 
 subagents = [
     {"name": "spatial-agent",
@@ -134,6 +134,6 @@ A single agent with 14 flat tools is just a ReAct agent with extra steps. To sta
 
 ## To verify at the hackathon
 - [ ] `deepagents` version installed, and whether `TodoListMiddleware` import path matches
-- [ ] Which Bedrock models the Amazon sponsor gives us access to (tool-calling support)
+- [x] Model: Claude Haiku 5.5 via the Anthropic API (no Bedrock / Amazon track)
 - [ ] Whether the Matterport API exposes doors and room adjacency (needed to auto-build the nav graph)
 - [ ] LangSmith key for tracing (good for showing the agent's steps in the demo)
