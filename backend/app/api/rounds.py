@@ -131,7 +131,7 @@ def staff(svc: RoundsServices = Depends(get_services)) -> list[StaffMember]:
 
 @router.get("/jobs")
 def jobs(status: str | None = None, svc: RoundsServices = Depends(get_services)) -> list[Job]:
-    return svc.list_jobs(status)
+    return _call(svc.list_jobs, status)
 
 
 class JobIn(BaseModel):

@@ -41,6 +41,7 @@ def test_reads(client):
     assert len(client.get("/api/staff").json()) == 6
     assert len(client.get("/api/jobs").json()) == 8
     assert client.get("/api/jobs", params={"status": "done"}).json() == []
+    assert client.get("/api/jobs", params={"status": "open"}).status_code == 422
     r = client.get("/api/routes", params={"from_place_id": "p0", "to_place_id": "p2"}).json()
     assert r["meters"] == 20
     assert client.get("/api/routes", params={"from_place_id": "p0", "to_place_id": "zz"}).status_code == 404
