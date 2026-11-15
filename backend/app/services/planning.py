@@ -86,13 +86,15 @@ def solve_plan(graph: NavGraph, staff: list[StaffMember], jobs: list[Job], now: 
     infeasible += [Infeasible(job_id=j.id, reason=f"no staff role handles job kind {j.kind!r}")
                    for j in jobs if j.kind not in ROLE_FOR_KIND]
 
+    # Stop.eta is when the stop happens: service start, i.e. arrival or, if the
+    # staff member is early, the job's `earliest` (they don't stand idle at the door).
     def place_for(job: Job, s: OptStop) -> str:
         return job.dropoff_place_id if s.action == "dropoff" else job.pickup_place_id
 
     assignments = [
         Assignment(staff_id=s.id, stops=[
             Stop(job_id=x.job_id, place_id=place_for(by_id[x.job_id], x), action=x.action,
-                 eta=now + timedelta(seconds=x.arrival), meters_from_prev=round(x.meters_from_prev, 2))
+                 eta=now + timedelta(seconds=x.start), meters_from_prev=round(x.meters_from_prev, 2))
             for x in routes[s.id]])
         for s in staff
     ]

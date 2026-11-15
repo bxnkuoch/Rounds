@@ -68,6 +68,14 @@ def test_etas_start_at_now_and_increase(svc):
         assert all(e >= svc.now for e in etas) and etas == sorted(etas)
 
 
+def test_eta_is_service_start_not_early_arrival(svc):
+    # Staff reach p1 in seconds, but the job can't start until 45 min in.
+    start = svc.now + timedelta(minutes=45)
+    job = svc.create_job("breathing_treatment", "p1", earliest=start, latest=start + timedelta(minutes=30))
+    stop = next(s for a in svc.propose_plan([job.id]).plan.assignments for s in a.stops)
+    assert stop.eta == start
+
+
 def test_apply_sets_current_and_statuses_once(svc):
     pid = svc.propose_plan().plan.id
     plan = svc.apply_plan(pid)
