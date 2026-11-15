@@ -158,6 +158,12 @@ def test_create_job_validation(svc):
         svc.create_job("iv_start", "p0", priority=9)
 
 
+def test_list_jobs_rejects_unknown_status(svc):
+    # The agent once asked for status="open"; an error it can read beats a silent [].
+    with pytest.raises(ValueError, match="new"):
+        svc.list_jobs("open")
+
+
 def test_route_between(svc):
     r = svc.route_between("p0", "p3")
     assert r.meters == 30 and r.node_ids == ["n0", "n1", "n2", "n3"]

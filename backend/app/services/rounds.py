@@ -22,6 +22,7 @@ from app.spatial.nav_graph import NavGraph
 from app.synthetic import ROLE_FOR_KIND, SERVICE_MINUTES, Scenario
 
 _ACTIVE = ("new", "planned")
+_STATUSES = ("new", "planned", "done", "cancelled")
 
 
 class RoundsServices:
@@ -66,6 +67,8 @@ class RoundsServices:
         return sorted(self._unavailable)
 
     def list_jobs(self, status: str | None = None) -> list[Job]:
+        if status is not None and status not in _STATUSES:
+            raise ValueError(f"unknown status {status!r}; expected one of {list(_STATUSES)} or none for all")
         with self._lock:
             return [j for j in self._jobs.values() if status is None or j.status == status]
 
