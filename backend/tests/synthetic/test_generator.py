@@ -56,6 +56,7 @@ def test_job_shapes_and_windows_inside_shift():
         assert (j.dropoff_place_id is not None) == (j.kind == "transport")
         if j.dropoff_place_id:
             assert j.dropoff_place_id in dest_ids
+            assert j.dropoff_place_id != j.pickup_place_id
         for t in (j.earliest, j.latest):
             assert t is None or s.shift_start <= t <= s.shift_end
         if j.earliest and j.latest:

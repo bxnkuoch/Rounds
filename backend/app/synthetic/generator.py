@@ -127,7 +127,9 @@ def generate_scenario(graph: NavGraph, seed: int = 0, day: date = date(2026, 11,
     for _ in range(transport_jobs):
         # Patient ready at `earliest`; must arrive at the destination within 30-60 min.
         ready = rng.randrange(0, shift_min - 90, 15)
-        add("transport", rng.choice(rooms), rng.choice(destinations), at(ready), at(ready + rng.choice([30, 45, 60])))
+        room = rng.choice(rooms)
+        dest = rng.choice([d for d in destinations if d.id != room.id])
+        add("transport", room, dest, at(ready), at(ready + rng.choice([30, 45, 60])))
 
     label = (f"SYNTHETIC scenario (seed={seed}): generated staff and jobs, not real patients or staff. "
              f"Places are real labels from Matterport model {graph.source.get('model_id', 'unknown')}.")
