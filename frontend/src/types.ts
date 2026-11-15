@@ -46,6 +46,17 @@ export type Infeasible = { job_id: string; reason: string }
 export type LateJob = { job_id: string; minutes_late: number }
 export type Baseline = { total_meters: number; late_jobs: number }
 
+export type OrderOutcome = { job_ids: string[]; stops: Stop[]; total_meters: number; late: LateJob[] }
+export type SwapComparison = {
+  plan_id: string
+  staff_id: string
+  swapped_job_ids: string[]
+  current_order: OrderOutcome
+  swapped_order: OrderOutcome
+  meters_delta: number
+  late_jobs_delta: number
+}
+
 export type Plan = {
   id: string
   created_at: string

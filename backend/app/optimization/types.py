@@ -148,3 +148,18 @@ def deadline_late(job: OptJob, stop: Stop) -> int:
         return 0
     t = stop.arrival if stop.action == "dropoff" else stop.start
     return max(0, t - job.latest)
+
+
+def do_job(job: OptJob, d: Distances, at_node: str, at_time: int) -> tuple[list[Stop], Stop, str, int]:
+    """Walk from `at_node` (free at `at_time`) and do `job`: wait for `earliest`, serve, then carry to the
+    dropoff if any. Returns (stops, the deadline stop, where you end up, when you're free)."""
+    arrival = at_time + d.seconds(at_node, job.pickup_node)
+    start = max(arrival, job.earliest) if job.earliest is not None else arrival
+    first = Stop(job.id, job.pickup_node, "service" if job.dropoff_node is None else "pickup",
+                 arrival, start, start + job.service_s, d.meters(at_node, job.pickup_node))
+    if job.dropoff_node is None:
+        return [first], first, job.pickup_node, first.depart
+    arrival = first.depart + d.seconds(job.pickup_node, job.dropoff_node)
+    drop = Stop(job.id, job.dropoff_node, "dropoff", arrival, arrival, arrival,
+                d.meters(job.pickup_node, job.dropoff_node))
+    return [first, drop], drop, job.dropoff_node, arrival

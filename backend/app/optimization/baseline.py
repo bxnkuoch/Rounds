@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from app.optimization.types import (
     DEFAULT_WALKING_SPEED_MPS, DistanceMatrixFn, Distances, LateJob, OptJob, OptStaff, Solution, StaffRoute,
-    Stop, Unassigned, deadline_late, precheck, solo_finish,
+    Stop, Unassigned, deadline_late, do_job, precheck, solo_finish,
 )
 
 
@@ -34,19 +34,8 @@ def baseline(staff: list[OptStaff], jobs: list[OptJob], distance_matrix: Distanc
             unassigned.append(Unassigned(job.id, "did not fit in any staff member's remaining shift"))
             continue
         i = chosen
-        arrival = now[i] + d.seconds(pos[i], job.pickup_node)
-        start = max(arrival, job.earliest) if job.earliest is not None else arrival
-        first = Stop(job.id, job.pickup_node, "service" if job.dropoff_node is None else "pickup",
-                     arrival, start, start + job.service_s, d.meters(pos[i], job.pickup_node))
-        stops[i].append(first)
-        deadline_stop = first
-        pos[i], now[i] = job.pickup_node, first.depart
-        if job.dropoff_node is not None:
-            arrival = now[i] + d.seconds(pos[i], job.dropoff_node)
-            deadline_stop = Stop(job.id, job.dropoff_node, "dropoff", arrival, arrival, arrival,
-                                 d.meters(pos[i], job.dropoff_node))
-            stops[i].append(deadline_stop)
-            pos[i], now[i] = job.dropoff_node, arrival
+        done, deadline_stop, pos[i], now[i] = do_job(job, d, pos[i], now[i])
+        stops[i] += done
         if (s := deadline_late(job, deadline_stop)) > 0:
             late.append(LateJob(job.id, s))
 

@@ -12,9 +12,9 @@ import math
 from datetime import datetime, timedelta
 
 from app.models.domain import (
-    Assignment, Baseline, Infeasible, Job, LateJob, Plan, PlanDiff, StaffMember, Stop,
+    Assignment, Baseline, Infeasible, Job, LateJob, OrderOutcome, Plan, PlanDiff, StaffMember, Stop,
 )
-from app.optimization import OptJob, OptStaff, Solution, baseline, optimize
+from app.optimization import OptJob, OptStaff, Solution, baseline, optimize, simulate_order
 from app.optimization import Stop as OptStop
 from app.spatial.nav_graph import NavGraph
 from app.synthetic import ROLE_FOR_KIND
@@ -26,6 +26,16 @@ def _late_minutes(job: Job, stop: OptStop, ref: datetime) -> int:
     t = stop.arrival if stop.action == "dropoff" else stop.start
     over = (ref + timedelta(seconds=t) - job.latest).total_seconds()
     return math.ceil(over / 60) if over > 0 else 0
+
+
+def _opt_job(j: Job, node_of: dict[str, str], ref: datetime) -> OptJob:
+    """A contract Job as optimizer input, with times in seconds from `ref` (past times clamp to 0)."""
+    def secs(t: datetime | None) -> int | None:
+        return None if t is None else max(0, int((t - ref).total_seconds()))
+
+    return OptJob(j.id, node_of[j.pickup_place_id], node_of[j.dropoff_place_id] if j.dropoff_place_id else None,
+                  earliest=secs(j.earliest), latest=secs(j.latest), service_s=j.service_minutes * 60,
+                  priority=j.priority)
 
 
 def _late(sol: Solution, jobs: dict[str, Job], ref: datetime) -> list[LateJob]:
@@ -66,11 +76,7 @@ def solve_plan(graph: NavGraph, staff: list[StaffMember], jobs: list[Job], now: 
             node_to_place.setdefault(pickup, j.pickup_place_id)
             if drop:
                 node_to_place.setdefault(drop, j.dropoff_place_id)
-            opt_jobs.append(OptJob(
-                j.id, pickup, drop,
-                earliest=None if j.earliest is None else max(0, secs(j.earliest)),
-                latest=None if j.latest is None else max(0, secs(j.latest)),
-                service_s=j.service_minutes * 60, priority=j.priority))
+            opt_jobs.append(_opt_job(j, node_of, now))
         if not opt_jobs:
             continue
         opt = optimize(opt_staff, opt_jobs, graph.distance_matrix, walking_speed_mps)
@@ -125,3 +131,24 @@ def make_diff(old: Plan | None, new: Plan) -> PlanDiff:
         meters_delta=round(new.total_meters - (old.total_meters if old else 0.0), 2),
         late_jobs_delta=len(new.late) - (len(old.late) if old else 0),
     )
+
+
+def replay_order(graph: NavGraph, staff: StaffMember, jobs: list[Job], ref: datetime,
+                 walking_speed_mps: float) -> OrderOutcome:
+    """`staff` does `jobs` in exactly this order, starting at `ref` (or their shift start, if later)."""
+    def secs(t: datetime) -> int:
+        return int((t - ref).total_seconds())
+
+    node_of = {pid: p.node_id for pid, p in graph.places.items()}
+    opt_staff = OptStaff(staff.id, node_of[staff.start_place_id], max(0, secs(staff.shift_start)),
+                         secs(staff.shift_end))
+    opt_jobs = [_opt_job(j, node_of, ref) for j in jobs]
+    route, _ = simulate_order(opt_staff, opt_jobs, graph.distance_matrix, walking_speed_mps)
+    by_id = {j.id: j for j in jobs}
+    stops = [Stop(job_id=x.job_id, action=x.action, eta=ref + timedelta(seconds=x.start),
+                  place_id=by_id[x.job_id].dropoff_place_id if x.action == "dropoff" else by_id[x.job_id].pickup_place_id,
+                  meters_from_prev=round(x.meters_from_prev, 2)) for x in route.stops]
+    late = [LateJob(job_id=x.job_id, minutes_late=m) for x in route.stops
+            if (m := _late_minutes(by_id[x.job_id], x, ref)) > 0]
+    return OrderOutcome(job_ids=[j.id for j in jobs], stops=stops, total_meters=round(route.meters, 2),
+                        late=sorted(late, key=lambda l: l.job_id))

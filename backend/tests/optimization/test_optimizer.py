@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from app.optimization import OptJob, OptStaff, baseline, optimize
+from app.optimization import OptJob, OptStaff, baseline, optimize, simulate_order
 
 
 def corridor(ids: list[str]) -> list[list[float]]:
@@ -170,3 +170,21 @@ def test_airedale_plan_uses_real_graph_distances():
             assert s.meters_from_prev == pytest.approx(g.shortest_path(prev, s.node_id)[0])
             prev = s.node_id
     assert opt.total_meters <= base.total_meters
+
+
+def test_simulate_order_replays_the_given_order_exactly():
+    jobs = [OptJob("A", "x10"), OptJob("C", "x30", service_s=5), OptJob("B", "x20", latest=25)]
+    route, late = simulate_order(ALICE, jobs, corridor, walking_speed_mps=1.0)
+    # 0 -> 10 -> 30 (+5 s service) -> 20: B is reached at t=45, 20 s after its deadline.
+    assert [(s.job_id, s.start) for s in route.stops] == [("A", 10), ("C", 30), ("B", 45)]
+    assert route.meters == 40 and [(x.job_id, x.seconds_late) for x in late] == [("B", 20)]
+
+
+def test_simulate_order_matches_optimizer_on_its_own_order():
+    jobs = [OptJob("A", "x10", "x40"), OptJob("B", "x20", "x30", earliest=100)]
+    opt = run([ALICE], jobs)
+    seq = list(dict.fromkeys(j for j, _ in order(opt, "S1")))
+    route, late = simulate_order(ALICE, [next(j for j in jobs if j.id == i) for i in seq], corridor, 1.0)
+    assert route.meters == opt.total_meters and not late
+    assert [(s.job_id, s.action, s.start) for s in route.stops] == [
+        (s.job_id, s.action, s.start) for s in opt.routes[0].stops]
