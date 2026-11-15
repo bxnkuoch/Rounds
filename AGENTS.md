@@ -61,7 +61,7 @@ The agent never computes routes or reads raw data. Its tools (Minh) are thin wra
 - Status: **early build.**
 - Stack:
   - **Backend (decided):** Python + FastAPI. All the AI and optimization runs here: LangChain `deepagents` on Claude Haiku 5.5 via the Anthropic API (`AGENT_MODEL` in `local.env`), OR-Tools, A* pathfinding, and the Matterport/CoStar API clients (keys stay server-side).
-  - **Frontend (UNDECIDED):** the options are React + Vite (a single-page app) or Next.js. Both would use TypeScript + Tailwind + shadcn/ui, call FastAPI, and show a 2D floor plan plus the Matterport Showcase SDK 3D view. **Agents: don't scaffold the frontend or pick a framework until both teammates confirm here.**
+  - **Frontend (decided 2026-11-15):** React + Vite + TypeScript + Tailwind in `frontend/`. The Vite dev server proxies `/api` and `/agent` to FastAPI on :8000. It shows a 2D floor plan, the Matterport 3D tour, the plan view, dispatch, agent chat and the approval card. shadcn/ui is not set up yet.
 
 **Product in one line:** Rounds plans and replans shifts for hospital staff who cover the whole building (transporters, respiratory therapists, IV team nurses). It uses a deterministic optimizer on a navigation graph built from a Matterport digital twin, with a Deep Agent coordinating and a human approving every change.
 
