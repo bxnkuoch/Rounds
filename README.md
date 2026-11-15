@@ -4,7 +4,7 @@
 
 Rounds plans and replans the shift for hospital staff who cover the whole building: transporters, respiratory therapists and IV team nurses. It builds a navigation graph from a building's Matterport digital twin, orders the work with a deterministic optimizer, and puts an AI agent in charge of coordinating. **A human approves every schedule change.**
 
-Built at HackPrinceton 2026. Status: **early build.** The backend pieces work and are tested. There is no frontend yet.
+Built at HackPrinceton 2026. Status: **early build.** The backend and a first frontend work and are tested.
 
 ---
 
@@ -46,7 +46,7 @@ Everything streams to the client as typed Server-Sent Events: `todos`, `tool_cal
 | Shared models and service contract | `backend/app/models/`, `backend/app/services/contract.py` | v0, provisional |
 | Real services that connect the optimizer to the agent | `backend/app/services/` | ✅ |
 | Main app + domain API (places, map, staff, jobs, plans, routes, clock) | `backend/app/main.py`, `backend/app/api/rounds.py` | ✅ |
-| Frontend | `frontend/` | ⏳ not started |
+| Frontend: floor plan, plan view, approval card, dispatch, agent chat, 3D tour (React + Vite) | `frontend/` | ✅ |
 
 ## Quick start
 
@@ -67,6 +67,16 @@ curl -s -X POST localhost:8000/api/plans/propose  # optimizer proposal + diff + 
 curl -s -X POST localhost:8000/agent/threads      # -> {"thread_id": "..."}
 ```
 
+Then the frontend, in a second terminal (Node 20+):
+
+```bash
+cd frontend
+npm install
+npm run dev                                       # http://localhost:5173 (localhost, not 127.0.0.1)
+```
+
+Vite proxies `/api` and `/agent` to the backend on :8000.
+
 The building export (`data/raw/matterport/6Ee2LwLfx58.json`, gitignored; see `docs/handoff-2026-11-15.md`) is loaded at startup. Without it, `/api` returns 503 and the agent still starts.
 
 `backend/app/agents/README.md` has an example for every endpoint and the full event contract.
@@ -84,12 +94,13 @@ Secrets go in `local.env` at the repo root. It is gitignored. Copy `.env.example
 
 ## Tech
 
-Python · FastAPI · LangChain [Deep Agents](https://docs.langchain.com/) · LangGraph · Claude Haiku 5.5 (Anthropic API) · OR-Tools · Pydantic · Matterport
+Python · FastAPI · React + Vite + Tailwind · LangChain [Deep Agents](https://docs.langchain.com/) · LangGraph · Claude Haiku 5.5 (Anthropic API) · OR-Tools · Pydantic · Matterport
 
 ## Repo map
 
 ```
 backend/        FastAPI app, agent, optimizer, spatial, tests
+frontend/       React + Vite UI
 tools/          Matterport export tooling
 docs/           design specs, plans, task split, handoffs
 pitch.md        problem, users, and demo story
