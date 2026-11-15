@@ -79,6 +79,9 @@ class FakeServices:
         proposal = self.proposals[plan_id]
         if plan_id in self.applied:
             raise ValueError(f"plan {plan_id} already applied")
+        current_id = self.current_plan.id if self.current_plan else None
+        if proposal.diff.from_plan_id != current_id:
+            raise ValueError(f"plan {plan_id} is stale (based on {proposal.diff.from_plan_id}, current is {current_id})")
         self.applied.add(plan_id)
         self.apply_calls.append(plan_id)
         self.current_plan = proposal.plan
