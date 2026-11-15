@@ -1,5 +1,11 @@
 """In-memory Services for tests. All data is SYNTHETIC test fixtures (IDs only)."""
+import json
 from datetime import datetime
+from typing import Any
+
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 
 from app.models.domain import (
     Assignment, Baseline, Job, Place, Plan, PlanDiff, Proposal, ReplanEvent, Route, StaffMember, Stop,
@@ -89,3 +95,57 @@ class FakeServices:
 
     def route_between(self, a_place_id: str, b_place_id: str) -> Route:
         return Route(from_place_id=a_place_id, to_place_id=b_place_id, meters=10.0, node_ids=["N1", "N2"])
+
+
+class ScriptedChatModel(BaseChatModel):
+    """Replays scripted AIMessages (or raises scripted Exceptions), one item per model call.
+
+    invoke, ainvoke, stream and astream each consume exactly one item. Offline, no API key.
+    """
+
+    responses: list[Any]
+    calls: list[list[BaseMessage]] = []
+    _next: int = 0
+
+    def __init__(self, responses: list[Any], **kwargs: Any):
+        super().__init__(responses=list(responses), calls=[], **kwargs)
+
+    @property
+    def _llm_type(self) -> str:
+        return "scripted"
+
+    def bind_tools(self, tools: Any, **kwargs: Any) -> "ScriptedChatModel":
+        return self
+
+    def _take(self, messages: list[BaseMessage]) -> AIMessage:
+        self.calls.append(list(messages))
+        if self._next >= len(self.responses):
+            raise AssertionError("script exhausted")
+        item = self.responses[self._next]
+        self._next += 1
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        return ChatResult(generations=[ChatGeneration(message=self._take(messages))])
+
+    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        return self._generate(messages)
+
+    def _stream(self, messages, stop=None, run_manager=None, **kwargs):
+        msg = self._take(messages)
+        chunk = AIMessageChunk(
+            content=msg.content,
+            id=msg.id,
+            tool_calls=msg.tool_calls,
+            tool_call_chunks=[
+                {"name": tc["name"], "args": json.dumps(tc["args"]), "id": tc["id"], "index": i}
+                for i, tc in enumerate(msg.tool_calls)
+            ],
+        )
+        yield ChatGenerationChunk(message=chunk)
+
+    async def _astream(self, messages, stop=None, run_manager=None, **kwargs):
+        for c in self._stream(messages):
+            yield c
