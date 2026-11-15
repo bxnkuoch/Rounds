@@ -1,6 +1,7 @@
 # LangChain Deep Agents: Notes for Rounds
 
 > Source: github.com/langchain-ai/deepagents and docs.langchain.com/oss/python/deepagents (read 2026-11-14).
+> **Use the `docs-langchain` and `reference-langchain` MCP servers (see AGENTS.md §6) for current APIs. These notes are a snapshot.**
 > At the hackathon, check the installed version with `pip show deepagents` before relying on any API below.
 
 ## What it is

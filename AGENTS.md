@@ -62,9 +62,22 @@ Each area has one owner at a time. Don't make large edits to the other person's 
 6. **Be honest about integrations.** Label which data is real (Matterport/CoStar) and which is synthetic. Don't claim a building is a hospital if it isn't.
 7. **Secrets:** API keys go only in `.env` (gitignored). Never put keys in frontend code. Never commit CoStar/Matterport raw datasets (sponsor restrictions; the repo is public).
 
-## 6. Engineering conventions
+## 6. LangChain / Deep Agents work: use the docs MCP servers
 
-- **Check, don't guess, library APIs.** Read the installed version (`pip show deepagents`, `npm ls`) and its docs before using an API. `deepagents` changes quickly (e.g. `write_todos` requires `TodoListMiddleware` since v0.7).
+Any work involving LangChain, LangGraph, or `deepagents` (the agent, tools, middleware, subagents, backends, human-in-the-loop, Bedrock model setup) must **check the official docs through MCP before writing or changing code.** Don't rely on memory, because these APIs change often.
+
+| MCP server | URL | Use it for |
+|---|---|---|
+| `docs-langchain` | https://docs.langchain.com/mcp | Guides and concepts: Deep Agents overview, customization, subagents, backends, HITL, MCP adapters |
+| `reference-langchain` | https://reference.langchain.com/mcp | API reference: exact signatures, parameters, import paths, class names |
+
+- Both are listed in the repo's `.mcp.json`. Claude Code asks once to approve them; other agents should add these URLs to their own MCP config.
+- Workflow: find the concept in `docs-langchain`, confirm the exact signature or import in `reference-langchain`, then check it against the installed version (`pip show deepagents`).
+- `deepagents-notes.md` is a summary from 2026-11-14 and may be out of date. If it disagrees with the MCP docs, the docs win; update the notes.
+
+## 7. Engineering conventions
+
+- **Check, don't guess, library APIs.** Read the installed version (`pip show deepagents`, `npm ls`) and its docs before using an API. `deepagents` changes quickly (e.g. `write_todos` requires `TodoListMiddleware` since v0.7). For LangChain, see §6.
 - Keep services separate: agent, task service, optimizer, routing, spatial, data access. Don't build one giant file.
 - External APIs (Matterport, CoStar, Bedrock) must fail gracefully. The core app keeps working without them.
 - Test the optimizer with small deterministic fixtures (known graph → known best order). It's the core of the demo.
