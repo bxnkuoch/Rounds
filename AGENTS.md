@@ -32,14 +32,27 @@ Each area has one owner at a time. Don't make large edits to the other person's 
 
 | Area | Path | Owner |
 |---|---|---|
-| Frontend (framework TBD) | `frontend/` | _TBD_ |
-| Backend API (FastAPI) | `backend/app/api/` | _TBD_ |
-| Optimizer + routing | `backend/app/optimization/` | _TBD_ |
-| Deep Agent + tools | `backend/app/agents/`, `backend/app/tools/` | _TBD_ |
-| Spatial / Matterport / CoStar | `backend/app/spatial/` | _TBD_ |
+| Frontend (framework TBD) | `frontend/` | **Benjamin** |
+| FastAPI app core: app setup, config, CORS, places/jobs/plans/routes endpoints | `backend/app/main.py`, `backend/app/api/` (except `agent.py`) | **Benjamin** |
+| FastAPI agent endpoints: chat/stream, approve/reject (HITL) | `backend/app/api/agent.py` | **Minh** |
+| Domain services: jobs, staff, plans, state | `backend/app/services/` | **Benjamin** |
+| Optimizer + routing | `backend/app/optimization/` | **Benjamin** |
+| Spatial / Matterport / CoStar (nav graph, exporter) | `backend/app/spatial/`, `tools/matterport_export/` | **Benjamin** (Minh wrote v1; see `docs/handoff-2026-11-15.md`) |
+| Deep Agent + tools | `backend/app/agents/`, `backend/app/tools/` | **Minh** |
 | Shared contracts | `backend/app/models/`, frontend types folder (path depends on the framework) | **both; announce changes** |
 
 **Shared contracts:** Pydantic models and TypeScript types must stay identical. If you change one, update the other in the same commit and mention it in the commit message.
+
+Branch prefixes: `minh/<feature>`, `benjamin/<feature>`.
+
+### 3.1 The seam between the agent and the backend
+
+The agent never computes routes or reads raw data. Its tools (Minh) are thin wrappers that call **service functions** (Benjamin) and return their Pydantic results. That boundary is the contract:
+
+- **Service functions live in `backend/app/services/`** and take and return models from `backend/app/models/`. Both people agree on the signatures before either side builds on them. Minh may add a stub with the agreed signature (one that raises `NotImplementedError`) so the agent can be built in parallel. Benjamin replaces it.
+- **The agent calls the same functions FastAPI calls.** No logic is duplicated in tools or routes.
+- **Changing the schedule always goes through human approval:** the tool proposes, `interrupt_on` pauses, a human approves in the UI through `api/agent.py`, and then the service applies the change. The frontend (Benjamin) renders the approval card from the interrupt payload that Minh's endpoint returns. Agree on that payload shape in `backend/app/models/`.
+- **The frontend talks to two endpoint groups:** Benjamin's (places, plans, routes, map data) and Minh's (agent chat stream and approvals).
 
 ## 4. Project context
 
