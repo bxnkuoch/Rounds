@@ -54,4 +54,4 @@ Read `docs/handoff-2026-11-15.md` first. It covers the nav graph, the exporter, 
 
 ## Both: decide later
 
-- [ ] Airedale usage rights. Decide together whether to ask the CoStar/Matterport sponsor team if exporting the layout of the public Airedale tour (`6Ee2LwLfx58`) is OK for the demo. Either way: keep the export out of git, and credit the source in the UI ("Airedale Hospital AAU, public Matterport tour by apollo3d"). If the answer is no, switch to a CoStar medical office building (e.g. `7uM5JKssTED`) and call it a clinic, not a hospital. See `docs/handoff-2026-11-15.md`, "Open questions".
+- [x] Airedale usage rights. **Decided 2026-11-15 (Benjamin): use the public Airedale tour (`6Ee2LwLfx58`) for the demo without asking the sponsor.** The conditions still apply: the export stays out of git (`data/raw/` is gitignored), and the UI credits the source ("Airedale Hospital - Acute Assessment Unit, public Matterport tour by www.apollo3d.co.uk", with a link to the tour).
