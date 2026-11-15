@@ -108,6 +108,7 @@ def build_tools(services: Services) -> dict[str, BaseTool]:
               "meters after the current time, plus late, infeasible and unscheduled jobs and the plan's meters vs "
               "baseline.", _NoArgs),
         _wrap("apply_plan", lambda plan_id: services.apply_plan(plan_id),
-              "Apply a previously proposed plan by plan_id. Requires human approval.", _Apply),
+              "Apply a previously proposed plan by plan_id. Requires human approval. If it returns a plan (not an ERROR), "
+              "that plan is now applied and current.", _Apply),
     ]
     return {t.name: t for t in tools}
