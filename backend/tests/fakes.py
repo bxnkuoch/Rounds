@@ -9,7 +9,7 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 
 from app.models.domain import (
     Assignment, Baseline, Job, OrderOutcome, Place, Plan, PlanDiff, Proposal, ReplanEvent, Route, StaffMember, Stop,
-    SwapComparison,
+    ShiftSummary, SwapComparison,
 )
 
 T0 = datetime(2026, 1, 1, 8, 0)
@@ -96,6 +96,10 @@ class FakeServices:
 
     def route_between(self, a_place_id: str, b_place_id: str) -> Route:
         return Route(from_place_id=a_place_id, to_place_id=b_place_id, meters=10.0, node_ids=["N1", "N2"])
+
+    def shift_summary(self) -> ShiftSummary:
+        return ShiftSummary(scenario_label="SYNTHETIC test", now=T0, plan_id=self.current_plan.id, staff=[], late=[],
+                            infeasible=[], unscheduled_job_ids=["J-3"], total_meters=20.0, baseline_meters=40.0)
 
     def compare_swap(self, staff_id: str, job_a: str, job_b: str) -> SwapComparison:
         self.swap_calls = getattr(self, "swap_calls", []) + [(staff_id, job_a, job_b)]

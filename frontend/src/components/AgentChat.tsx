@@ -8,6 +8,7 @@ type Props = {
   todos: TodoItem[]
   busy: boolean
   onSend: (text: string) => void
+  onNewShift: () => void
 }
 
 const STYLE: Record<LogLine['kind'], string> = {
@@ -19,7 +20,7 @@ const STYLE: Record<LogLine['kind'], string> = {
 }
 
 /** Chat with the Deep Agent coordinator: visible todo plan, tool calls and subagent handoffs. */
-export function AgentChat({ log, draft, todos, busy, onSend }: Props) {
+export function AgentChat({ log, draft, todos, busy, onSend, onNewShift }: Props) {
   const [text, setText] = useState('')
   const end = useRef<HTMLDivElement>(null)
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [log, draft])
@@ -49,7 +50,17 @@ export function AgentChat({ log, draft, todos, busy, onSend }: Props) {
         {busy && !draft && <div className="text-xs text-slate-400">working…</div>}
         <div ref={end} />
       </div>
-      <form className="flex gap-2 border-t border-slate-200 p-2"
+      <div className="flex gap-2 border-t border-slate-200 px-2 pt-2 text-xs">
+        <button disabled={busy} onClick={() => onSend('Write the shift handoff.')}
+                className="rounded border border-slate-400 px-2 py-1 hover:bg-white disabled:opacity-40">
+          Write shift handoff
+        </button>
+        <button disabled={busy} onClick={onNewShift} title="New conversation; the agent can read the last handoff"
+                className="rounded border border-slate-400 px-2 py-1 hover:bg-white disabled:opacity-40">
+          Start next shift
+        </button>
+      </div>
+      <form className="flex gap-2 p-2"
             onSubmit={e => { e.preventDefault(); if (text.trim() && !busy) { onSend(text.trim()); setText('') } }}>
         <input value={text} onChange={e => setText(e.target.value)} maxLength={4000} placeholder="Message the agent"
                className="min-w-0 flex-1 rounded border border-slate-300 px-2 py-1.5" />

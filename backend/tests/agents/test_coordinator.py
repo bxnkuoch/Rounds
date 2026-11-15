@@ -6,7 +6,9 @@ written in call order across agents.
 import uuid
 
 from langchain_core.messages import AIMessage, ToolMessage
+from deepagents.backends import CompositeBackend, StoreBackend
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command
 
 from app.agents import coordinator
@@ -48,7 +50,7 @@ def until_interrupt() -> list:
 def _agent(script: list):
     fake = FakeServices()
     model = ScriptedChatModel(script)
-    return fake, model, build_agent(fake, model, InMemorySaver())
+    return fake, model, build_agent(fake, model, InMemorySaver(), InMemoryStore())
 
 
 # --- static shape -------------------------------------------------------------
@@ -76,15 +78,18 @@ def test_create_deep_agent_kwargs(monkeypatch):
         return "graph"
 
     monkeypatch.setattr(coordinator, "create_deep_agent", fake_create)
-    saver = InMemorySaver()
+    saver, store = InMemorySaver(), InMemoryStore()
     model = ScriptedChatModel([])
-    assert build_agent(FakeServices(), model, saver) == "graph"
+    assert build_agent(FakeServices(), model, saver, store) == "graph"
 
     assert captured["model"] is model
     assert captured["checkpointer"] is saver
+    assert captured["store"] is store
+    backend = captured["backend"]
+    assert isinstance(backend, CompositeBackend) and isinstance(backend.routes["/memories/"], StoreBackend)
     assert captured["system_prompt"] == COORDINATOR_PROMPT
     assert [t.name for t in captured["tools"]] == [
-        "list_places", "list_staff", "list_jobs", "get_current_plan", "route_between", "apply_plan"]
+        "list_places", "list_staff", "list_jobs", "get_current_plan", "route_between", "shift_summary", "apply_plan"]
     assert captured["interrupt_on"] == {"apply_plan": {"allowed_decisions": ["approve", "reject"]}}
     assert [type(m).__name__ for m in captured["middleware"]] == ["TodoListMiddleware"]
     specs = {s["name"]: s for s in captured["subagents"]}
@@ -233,3 +238,27 @@ def test_general_purpose_subagent_cannot_bypass_approval():
     (err,) = _subagent_tool_messages(model)
     assert err.status == "error" and "not a valid tool" in err.content
     assert out["messages"][-1].content == "Done."
+
+
+# --- shift handoff: /memories/ outlives the thread ------------------------------
+
+def test_handoff_in_memories_is_readable_from_the_next_shift_thread():
+    fake = FakeServices()
+    script = [
+        call("shift_summary", {}),
+        call("write_file", {"file_path": "/memories/handoff.md", "content": "# Handoff\nPlan P-0. Late: none."}),
+        call("write_file", {"file_path": "/scratch.md", "content": "thread-only note"}),
+        say("Saved the handoff."),
+        # next shift (new thread)
+        call("read_file", {"file_path": "/memories/handoff.md"}),
+        call("read_file", {"file_path": "/scratch.md"}),
+        say("Last shift: plan P-0, no late jobs."),
+    ]
+    model = ScriptedChatModel(script)
+    agent = build_agent(fake, model, InMemorySaver(), InMemoryStore())
+    agent.invoke({"messages": [{"role": "user", "content": "Write the shift handoff."}]}, cfg())
+    out = agent.invoke({"messages": [{"role": "user", "content": "What did the last shift hand off?"}]}, cfg())
+    reads = [m for m in out["messages"] if isinstance(m, ToolMessage) and m.name == "read_file"]
+    assert "Plan P-0. Late: none." in reads[0].content
+    assert "thread-only note" not in reads[1].content  # non-/memories/ files stay in their own thread
+    assert fake.apply_calls == []

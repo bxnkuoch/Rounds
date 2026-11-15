@@ -81,3 +81,10 @@ No `ANTHROPIC_API_KEY` was available when this was written; only offline tests a
 1. Put `ANTHROPIC_API_KEY=...` in `local.env`, start the dev app, create a thread.
 2. Send "What places are on the unit?" and expect a `tool_call` `list_places` with real Airedale names.
 3. Send "Make a plan for my shift" and expect a `tool_result` with `ok=false` (stub `NotImplementedError`) and a message that reports it rather than inventing a plan.
+
+## Shift handoff and memory across shifts
+
+- **Write shift handoff** (or "Write the shift handoff." in chat): the coordinator calls `shift_summary` (deterministic facts: each staff member's remaining jobs, next stop and remaining meters after the simulated `now`, plus late, infeasible and unscheduled jobs) and writes `/memories/handoff.md` with the Deep Agents `write_file` tool.
+- `/memories/` is routed by a `CompositeBackend` to a `StoreBackend` on the runtime's `InMemoryStore`, so it outlives the thread. Every other path stays in the thread's own state.
+- A new thread is a new shift. Asked "What did the previous shift hand off?", the coordinator reads the file back with `read_file`.
+- The store is in memory: it survives across threads, not across a server restart.

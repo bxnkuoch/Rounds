@@ -123,6 +123,29 @@ class SwapComparison(BaseModel):
     late_jobs_delta: int
 
 
+class StaffShiftSummary(BaseModel):
+    staff_id: str
+    role: str
+    available: bool
+    remaining_job_ids: list[str]  # jobs with a stop at or after `now`, in plan order
+    next_stop: Stop | None
+    next_place_name: str | None
+    remaining_meters: float
+
+
+class ShiftSummary(BaseModel):
+    """Additive (Benjamin): deterministic facts for the shift handoff report, so the agent never counts."""
+    scenario_label: str
+    now: datetime
+    plan_id: str | None
+    staff: list[StaffShiftSummary]
+    late: list[LateJob]
+    infeasible: list[Infeasible]
+    unscheduled_job_ids: list[str]  # active jobs that aren't in the current plan
+    total_meters: float | None
+    baseline_meters: float | None
+
+
 class Route(BaseModel):
     from_place_id: str
     to_place_id: str

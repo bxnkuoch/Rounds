@@ -171,7 +171,7 @@ export default function App() {
                              onSimulateStat={simulateStat} />
             </>)}
             {tab === 'agent' && (
-              <AgentChat log={ag.log} draft={ag.draft} todos={ag.todos} busy={ag.busy} onSend={ag.send} />
+              <AgentChat log={ag.log} draft={ag.draft} todos={ag.todos} busy={ag.busy} onSend={ag.send} onNewShift={ag.newShift} />
             )}
           </div>
         </aside>

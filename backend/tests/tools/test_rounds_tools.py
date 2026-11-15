@@ -7,7 +7,7 @@ from tests.fakes import FakeServices
 
 NAMES = {
     "list_places", "list_staff", "list_jobs", "get_current_plan",
-    "propose_plan", "propose_replan", "route_between", "compare_swap", "apply_plan",
+    "propose_plan", "propose_replan", "route_between", "compare_swap", "shift_summary", "apply_plan",
 }
 
 

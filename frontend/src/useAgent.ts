@@ -56,6 +56,13 @@ export function useAgent(onRunFinished: () => void) {
     push({ kind: 'user', text: e.kind === 'job_added' ? `[dispatch] new job ${e.job_id}` : `[dispatch] ${e.staff_id} unavailable` })
     return run(t => agent.event(t, e))
   }
+  /** A new conversation is a new shift; the agent can still read the last shift's handoff from /memories/. */
+  const newShift = () => {
+    thread.current = null
+    setLog([])
+    setTodos([])
+    setPending(null)
+  }
   const decide = (decision: 'approve' | 'reject', note?: string) => {
     if (!pending) return
     const id = pending.approval_id
@@ -64,5 +71,5 @@ export function useAgent(onRunFinished: () => void) {
     return run(t => agent.decide(t, id, decision, note))
   }
 
-  return { log, draft, todos, pending, busy, send, sendEvent, decide }
+  return { log, draft, todos, pending, busy, send, sendEvent, decide, newShift }
 }

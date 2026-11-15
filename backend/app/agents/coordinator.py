@@ -10,25 +10,38 @@ apply_plan call would raise an approval card for a call that can never run. With
 fails as an unknown tool and the only approval point is the coordinator's real apply_plan.
 """
 from deepagents import create_deep_agent
+from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
 from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT, SubAgent
 from langchain.agents.middleware import TodoListMiddleware
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.store.base import BaseStore
 
 from app.agents.prompts import COORDINATOR_PROMPT, EXPLAINER_PROMPT, SCHEDULER_PROMPT
 from app.services.contract import Services
 from app.tools.rounds_tools import build_tools
 
-COORDINATOR_TOOL_NAMES = ("list_places", "list_staff", "list_jobs", "get_current_plan", "route_between", "apply_plan")
+COORDINATOR_TOOL_NAMES = ("list_places", "list_staff", "list_jobs", "get_current_plan", "route_between", "shift_summary",
+                          "apply_plan")
 SCHEDULER_TOOL_NAMES = ("list_jobs", "get_current_plan", "propose_plan", "propose_replan")
 EXPLAINER_TOOL_NAMES = ("get_current_plan", "list_jobs", "list_places", "list_staff", "route_between", "compare_swap")
 GENERAL_PURPOSE_TOOL_NAMES = ("list_places", "list_staff", "list_jobs", "get_current_plan", "route_between")
 
 INTERRUPT_ON = {"apply_plan": {"allowed_decisions": ["approve", "reject"]}}
 
+# Files under /memories/ live in the LangGraph store, so they outlive a thread: the shift handoff written in one
+# thread (shift) is readable from the next. Every other path stays in the thread's own state.
+MEMORIES = "/memories/"
 
-def build_agent(services: Services, model: BaseChatModel, checkpointer: BaseCheckpointSaver) -> CompiledStateGraph:
+
+def build_backend(store: BaseStore) -> CompositeBackend:
+    return CompositeBackend(default=StateBackend(),
+                            routes={MEMORIES: StoreBackend(namespace=lambda _rt: ("rounds", "memories"), store=store)})
+
+
+def build_agent(services: Services, model: BaseChatModel, checkpointer: BaseCheckpointSaver,
+                store: BaseStore) -> CompiledStateGraph:
     tools = build_tools(services)
 
     def pick(names: tuple[str, ...]) -> list:
@@ -62,4 +75,6 @@ def build_agent(services: Services, model: BaseChatModel, checkpointer: BaseChec
         subagents=[scheduler, explainer, general_purpose],
         interrupt_on=INTERRUPT_ON,
         checkpointer=checkpointer,
+        backend=build_backend(store),
+        store=store,
     )

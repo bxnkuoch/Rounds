@@ -228,3 +228,22 @@ def test_compare_swap_errors(svc):
         svc.compare_swap(a.staff_id, a.stops[0].job_id, other)
     with pytest.raises(ValueError, match="different"):
         svc.compare_swap(a.staff_id, a.stops[0].job_id, a.stops[0].job_id)
+
+
+def test_shift_summary_reports_remaining_work_after_now(svc):
+    empty = svc.shift_summary()
+    assert empty.plan_id is None and empty.total_meters is None and empty.scenario_label.startswith("SYNTHETIC")
+    assert sorted(empty.unscheduled_job_ids) == sorted(j.id for j in svc.list_jobs())
+    plan = svc.apply_plan(svc.propose_plan().plan.id)
+    s = svc.shift_summary()
+    assert s.plan_id == plan.id and s.total_meters == plan.total_meters and s.unscheduled_job_ids == []
+    assert s.baseline_meters == plan.baseline.total_meters and s.late == plan.late
+    busy = next(a for a in plan.assignments if len(a.stops) >= 2)
+    row = next(r for r in s.staff if r.staff_id == busy.staff_id)
+    assert row.next_stop == busy.stops[0] and row.remaining_job_ids == list(dict.fromkeys(x.job_id for x in busy.stops))
+    # Move the clock past the first stop: it drops out of what's left.
+    svc.set_now(busy.stops[0].eta + timedelta(seconds=1))
+    row = next(r for r in svc.shift_summary().staff if r.staff_id == busy.staff_id)
+    assert row.next_stop == busy.stops[1]
+    assert row.next_place_name == svc.graph.places[busy.stops[1].place_id].name
+    assert row.remaining_meters == round(sum(x.meters_from_prev for x in busy.stops[1:]), 2)
