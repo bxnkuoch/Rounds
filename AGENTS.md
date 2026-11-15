@@ -75,6 +75,23 @@ Any work involving LangChain, LangGraph, or `deepagents` (the agent, tools, midd
 - Workflow: find the concept in `docs-langchain`, confirm the exact signature or import in `reference-langchain`, then check it against the installed version (`pip show deepagents`).
 - `deepagents-notes.md` is a summary from 2026-11-14 and may be out of date. If it disagrees with the MCP docs, the docs win; update the notes.
 
+### Matterport API + SDK work: read the official docs first
+
+Before you write or change any code that touches Matterport (the GraphQL Model API, the Showcase/Embed SDK, or the Bundle SDK), read these docs:
+
+- https://developers.matterport.com/overview/ : the SDKs, SDK keys, embedding
+- https://developers.matterport.com/api/ : the Model API (GraphQL)
+
+Key facts (verified 2026-11-15; if the docs disagree, the docs win):
+- Model API: `POST https://api.matterport.com/api/models/graph`, HTTP Basic auth with Token ID as the username and Token Secret as the password. **It is server-side only**, so call it from FastAPI and never from the browser.
+- Showcase SDK: the SDK key goes in as `applicationKey` (the iframe `show?m=<MODEL_ID>&applicationKey=...` plus `connect()`). **Right now our SDK key's domain allowlist covers only `localhost` (http and https)**, so the 3D view works only on a local dev server. Deployed or LAN-IP hosts will fail until those domains are added in Matterport Developer Tools.
+
+### Credentials and local data
+
+- Secrets live in `local.env` at the repo root (gitignored). `.env.example` is the template that gets committed: copy it, then fill in your own values.
+- Variables: `MATTERPORT_API_TOKEN_ID`, `MATTERPORT_API_TOKEN_SECRET`, `MATTERPORT_GRAPHQL_URL`, `MATTERPORT_SDK_KEY`, `MATTERPORT_MODEL_ID`, `COSTAR_DATA_DIR`.
+- The CoStar hackathon kit stays **outside the repo**. Point `COSTAR_DATA_DIR` at your local copy. Don't copy it into the repo.
+
 ## 7. Engineering conventions
 
 - **Check, don't guess, library APIs.** Read the installed version (`pip show deepagents`, `npm ls`) and its docs before using an API. `deepagents` changes quickly (e.g. `write_todos` requires `TodoListMiddleware` since v0.7). For LangChain, see §6.
