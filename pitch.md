@@ -47,11 +47,11 @@ Today that plan lives in their heads or on a pager. Every interruption means re-
 
 Rounds tells each staff member **what to do next, when, and the best way to get there**, and keeps that answer correct as the shift changes.
 
-1. **One job model for all three roles.** A job is either a **single-stop job** (treatment, line placement) or a **pickup → drop-off job** (transport), with time windows, a duration, a priority from the source system, and an accessibility requirement.
-2. **Deterministic optimizer (pickup-and-delivery in the MVP).** A* on the building's navigation graph plus OR-Tools routing with time windows. For transport jobs, the pickup comes before its drop-off, both are done by the same person, at most one bed or wheelchair is moved at a time, and each end has its own window (patient ready / CT slot). The output is an ordered route, arrival times, walking distance, and **explicit flags for jobs that can't be done in time**. Jobs are never silently dropped.
-3. **Deep Agent coordinator.** Handles requests in plain language ("STAT ABG in 204, fit it in"), plans the steps, calls the optimizer and the routing code, and explains its choices from real numbers.
+1. **One job model for all three roles.** A job is either a **single-stop job** (treatment, line placement) or a **pickup → drop-off job** (transport), with time windows, a duration, and a priority from the source system. (A per-job accessibility requirement comes with multi-floor buildings; see Open questions.)
+2. **Deterministic optimizer (pickup-and-delivery in the MVP).** A* on the building's navigation graph plus OR-Tools routing with time windows. For transport jobs, the pickup comes before its drop-off, both are done by the same person, at most one bed or wheelchair is moved at a time, and each end has its own window (patient ready / must arrive by). The output is an ordered route, arrival times, walking distance, and **explicit flags for jobs that can't be done in time**. Jobs are never silently dropped.
+3. **Deep Agent coordinator.** Handles requests in plain language ("STAT treatment in Room 7, fit it in"), plans the steps, calls the optimizer and the routing code, and explains its choices from real numbers.
 4. **Human approval.** Every replan appears as a before/after card for the staff member or supervisor to approve.
-5. **Spatially aware.** The navigation graph comes from the building's Matterport digital twin, so routes respect real walls, elevators, and accessibility.
+5. **Spatially aware.** The navigation graph comes from the building's Matterport digital twin, so routes follow the real walkable paths between rooms. The demo building is one floor; elevators and accessible-only routes come with a multi-floor building (the loader already handles multiple floors).
 
 **Safety principle:** Rounds orders and routes work. It never decides clinical urgency. Priorities come from the source system, and a human approves every change.
 
@@ -61,17 +61,17 @@ Rounds tells each staff member **what to do next, when, and the best way to get 
 |---|---|
 | **Healthcare (main)** | A real patient-flow bottleneck; measurable on-time and walking improvements against a baseline; human approval for every change |
 | **LangChain: Best Use of DeepAgents** | Visible todo plan, subagent handoffs (spatial / scheduler / explainer), human-in-the-loop interrupts, a filesystem-written shift handoff report, and memory across shifts |
-| **CoStar: Inside & Out** | Matterport digital twin → navigation graph (walls, elevators, accessible routes) plus CoStar building data for context. The data shapes the route; it isn't decoration |
+| **CoStar: Inside & Out** | Matterport digital twin → navigation graph (the real walkable paths between rooms of a one-floor hospital unit) plus CoStar building data for context. The data shapes the route; it isn't decoration |
 
 ## 2-minute demo script
 
 | Time | Scene | On screen |
 |---|---|---|
-| 0:00–0:20 | **Hook** | "One IV team nurse, a dozen consults, five floors, before mid-morning. Transporters and RTs have the same problem: when they run late, the OR, imaging, and the ER run late too." Show Sam, an RT with 9 treatments across 3 floors |
+| 0:00–0:20 | **Hook** | "One IV team nurse, a dozen consults, five floors, before mid-morning. Transporters and RTs have the same problem: when they run late, the OR, imaging, and the ER run late too." Show the demo building: one floor of a real hospital unit (Airedale Hospital AAU, public Matterport tour), with a **SYNTHETIC** shift of RTs, IV nurses and transporters on it |
 | 0:20–0:45 | **Optimize** | Click *Optimize My Shift*. The route draws on the floor plan and Matterport view, with arrival times and walking distance **compared with the due-time-order baseline (computed, not hardcoded)** |
-| 0:45–1:15 | **Interruption** | "STAT blood gas, Room 204." The agent panel shows its todo plan → scheduler-agent → spatial-agent → **approval card** showing the old and new routes, and one job flagged as now at risk |
-| 1:15–1:35 | **Same engine, different role** | Switch to a transporter with 4 queued jobs, then add "bed move 204 → CT, scan at 10:30." The optimizer puts the pickup and drop-off into the queue (pickup before drop-off, one bed at a time, arriving before the CT slot), and the route detours to the elevator because of the accessibility flag |
-| 1:35–1:50 | **Explain** | "Why is 310 before 305?" The agent answers with actual travel times and time windows |
+| 0:45–1:15 | **Interruption** | Dispatch a STAT breathing treatment in Room 7, due in 20 minutes. The agent panel shows its todo plan → scheduler subagent → **approval card** with the new route drawn on the map, the change in meters, and the change in late jobs. Approve it |
+| 1:15–1:35 | **Same engine, different role** | Click a transporter, then dispatch a transport from Room 12 to Main Entrance, due 30 minutes from now. The optimizer fits the pickup and drop-off into their queue (pickup before drop-off, one patient at a time, arriving by the deadline) |
+| 1:35–1:50 | **Explain** | "Why is Room 9 before Room 4?" The agent answers with actual travel times and time windows |
 | 1:50–2:00 | **Close** | "Rounds is built for the people who keep a hospital moving." Then the metrics |
 
 ## Questions judges will ask
@@ -84,10 +84,10 @@ Rounds tells each staff member **what to do next, when, and the best way to get 
 
 ## Open questions
 
-- [ ] Can we get a Matterport model that looks like a hospital or clinic? If not, which building do we use, and how do we label it honestly?
+- [x] Can we get a Matterport model that looks like a hospital or clinic? Yes: Airedale Hospital AAU (`6Ee2LwLfx58`, public tour, one floor), credited in the UI. Usage rights: see `docs/task-split.md`.
 - [ ] Does the Matterport API expose doors and room adjacency? This decides whether the navigation graph is auto-generated or hand-drawn on top of the model.
 - [x] Model: Claude Haiku 5.5 via the Anthropic API (configurable with `AGENT_MODEL`; real-key smoke run pending). No Bedrock, so we make no Amazon track claim.
-- [x] Pickup-and-delivery (transport) is **in the MVP**: OR-Tools pickup-and-delivery with time windows, one-bed capacity, and accessible-only edges for bed and wheelchair moves.
+- [x] Pickup-and-delivery (transport) is **in the MVP**: OR-Tools pickup-and-delivery with time windows and one-patient capacity. Accessible-only edges are not in the MVP, because the demo building has one floor and no elevators.
 - [ ] Do transport jobs take accessible-only routes for every job, or only when a bed or wheelchair is involved? (Suggest: a per-job `requires_accessible` flag.)
 - [ ] Find a clinician on site for a validation quote.
 
