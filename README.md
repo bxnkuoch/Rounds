@@ -44,8 +44,9 @@ Everything streams to the client as typed Server-Sent Events: `todos`, `tool_cal
 | Deep Agent: coordinator, scheduler, approval gate | `backend/app/agents/`, `backend/app/tools/` | ✅ |
 | Agent API (SSE chat, dispatch inbox, approvals, state) | `backend/app/api/agent.py` | ✅ |
 | Shared models and service contract | `backend/app/models/`, `backend/app/services/contract.py` | v0, provisional |
-| Real services that connect the optimizer to the agent | `backend/app/services/` | ⏳ stubbed for now |
-| Main app, places/plans endpoints, frontend | `backend/app/main.py`, `frontend/` | ⏳ not started |
+| Real services that connect the optimizer to the agent | `backend/app/services/` | ✅ |
+| Main app + domain API (places, map, staff, jobs, plans, routes, clock) | `backend/app/main.py`, `backend/app/api/rounds.py` | ✅ |
+| Frontend | `frontend/` | ⏳ not started |
 
 ## Quick start
 
@@ -57,12 +58,16 @@ uv sync --group dev
 uv run --group dev pytest          # offline: no API key, no network
 ```
 
-To run the agent API locally:
+To run the app locally (domain API at `/api`, agent API at `/agent`, interactive docs at `/docs`):
 
 ```bash
-uv run uvicorn app.agent_dev_app:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000
+curl -s localhost:8000/api/meta                   # scenario (SYNTHETIC), clock, shift
+curl -s -X POST localhost:8000/api/plans/propose  # optimizer proposal + diff + baseline
 curl -s -X POST localhost:8000/agent/threads      # -> {"thread_id": "..."}
 ```
+
+The building export (`data/raw/matterport/6Ee2LwLfx58.json`, gitignored; see `docs/handoff-2026-11-15.md`) is loaded at startup. Without it, `/api` returns 503 and the agent still starts.
 
 `backend/app/agents/README.md` has an example for every endpoint and the full event contract.
 
