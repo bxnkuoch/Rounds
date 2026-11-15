@@ -16,10 +16,8 @@ Both go in repo-root `local.env` (gitignored; real environment variables overrid
 Until `main.py` mounts the router, use the dev-only app (from `backend/`). It needs no key to start; the model is built lazily on the first run:
 
 ```bash
-uv run --with uvicorn uvicorn app.agent_dev_app:app --reload --port 8000
+uv run uvicorn app.agent_dev_app:app --reload --port 8000
 ```
-
-`uvicorn` is not yet in `pyproject.toml`, so `--with uvicorn` pulls it in for the run. Add it as a dependency when `main.py` is wired up.
 
 ## Endpoints (SSE responses; use `curl -N`)
 
