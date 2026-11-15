@@ -1,6 +1,6 @@
 # Rounds agent (Minh)
 
-A LangChain Deep Agent (coordinator plus a scheduler subagent) on Claude Haiku 5.5 via the Anthropic API. It calls the service functions in `backend/app/services/` through the thin tools in `backend/app/tools/`. `apply_plan` is gated by `interrupt_on`, so a human must approve every schedule change.
+A LangChain Deep Agent (coordinator plus scheduler and explainer subagents) on Claude Haiku 5.5 via the Anthropic API. It calls the service functions in `backend/app/services/` through the thin tools in `backend/app/tools/`. `apply_plan` is gated by `interrupt_on`, so a human must approve every schedule change.
 
 Layout: `model.py` (model config), `prompts.py`, `coordinator.py` (agent graph), `translator.py` (LangGraph stream to `AgentEvent`), `runtime.py` (threads, locks, dispatch inbox, approvals). HTTP routes are in `backend/app/api/agent.py`. Event models are in `backend/app/models/agent_events.py` (v0, provisional, Benjamin to confirm).
 

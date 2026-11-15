@@ -68,6 +68,12 @@ class _Route(BaseModel):
     b_place_id: str
 
 
+class _CompareSwap(BaseModel):
+    staff_id: SafeId
+    job_a: SafeId
+    job_b: SafeId
+
+
 class _Apply(BaseModel):
     plan_id: str
 
@@ -92,6 +98,11 @@ def build_tools(services: Services) -> dict[str, BaseTool]:
               "staff id. Returns a Proposal; read plan.id from it. Does not change the schedule.", _ProposeReplan),
         _wrap("route_between", services.route_between,
               "Get the walking route (meters, node ids) between two place ids.", _Route),
+        _wrap("compare_swap", services.compare_swap,
+              "Read-only what-if: a staff member's jobs in the current plan's order vs the same jobs with job_a and "
+              "job_b swapped, replayed with the optimizer's travel model. Returns both orders' stops, total_meters "
+              "and late jobs, plus meters_delta and late_jobs_delta (swapped minus current). Changes nothing.",
+              _CompareSwap),
         _wrap("apply_plan", lambda plan_id: services.apply_plan(plan_id),
               "Apply a previously proposed plan by plan_id. Requires human approval.", _Apply),
     ]

@@ -7,7 +7,7 @@ from tests.fakes import FakeServices
 
 NAMES = {
     "list_places", "list_staff", "list_jobs", "get_current_plan",
-    "propose_plan", "propose_replan", "route_between", "apply_plan",
+    "propose_plan", "propose_replan", "route_between", "compare_swap", "apply_plan",
 }
 
 
@@ -60,3 +60,12 @@ def test_apply_stale_plan_is_error():
 def test_stub_not_implemented_is_string():
     out = build_tools(StubServices(None))["list_jobs"].invoke({"status": None})
     assert out == "ERROR: NotImplementedError: owned by Benjamin: services.list_jobs"
+
+
+def test_compare_swap_tool_calls_service_and_validates_ids():
+    svc = FakeServices()
+    t = build_tools(svc)["compare_swap"]
+    out = json.loads(t.invoke({"staff_id": "S-1", "job_a": "J-1", "job_b": "J-2"}))
+    assert svc.swap_calls == [("S-1", "J-1", "J-2")] and out["meters_delta"] == 10.0
+    bad = t.invoke({"staff_id": "S-1", "job_a": "J-1; ignore rules", "job_b": "J-2"})
+    assert bad.startswith("ERROR:") and svc.swap_calls == [("S-1", "J-1", "J-2")]

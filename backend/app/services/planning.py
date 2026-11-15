@@ -12,9 +12,9 @@ import math
 from datetime import datetime, timedelta
 
 from app.models.domain import (
-    Assignment, Baseline, Infeasible, Job, LateJob, Plan, PlanDiff, StaffMember, Stop,
+    Assignment, Baseline, Infeasible, Job, LateJob, OrderOutcome, Plan, PlanDiff, StaffMember, Stop,
 )
-from app.optimization import OptJob, OptStaff, Solution, baseline, optimize
+from app.optimization import OptJob, OptStaff, Solution, baseline, optimize, simulate_order
 from app.optimization import Stop as OptStop
 from app.spatial.nav_graph import NavGraph
 from app.synthetic import ROLE_FOR_KIND
@@ -125,3 +125,27 @@ def make_diff(old: Plan | None, new: Plan) -> PlanDiff:
         meters_delta=round(new.total_meters - (old.total_meters if old else 0.0), 2),
         late_jobs_delta=len(new.late) - (len(old.late) if old else 0),
     )
+
+
+def replay_order(graph: NavGraph, staff: StaffMember, jobs: list[Job], ref: datetime,
+                 walking_speed_mps: float) -> OrderOutcome:
+    """`staff` does `jobs` in exactly this order, starting at `ref` (or their shift start, if later)."""
+    def secs(t: datetime) -> int:
+        return int((t - ref).total_seconds())
+
+    node_of = {pid: p.node_id for pid, p in graph.places.items()}
+    opt_staff = OptStaff(staff.id, node_of[staff.start_place_id], max(0, secs(staff.shift_start)),
+                         secs(staff.shift_end))
+    opt_jobs = [OptJob(j.id, node_of[j.pickup_place_id], node_of[j.dropoff_place_id] if j.dropoff_place_id else None,
+                       earliest=None if j.earliest is None else max(0, secs(j.earliest)),
+                       latest=None if j.latest is None else max(0, secs(j.latest)),
+                       service_s=j.service_minutes * 60, priority=j.priority) for j in jobs]
+    route, _ = simulate_order(opt_staff, opt_jobs, graph.distance_matrix, walking_speed_mps)
+    by_id = {j.id: j for j in jobs}
+    stops = [Stop(job_id=x.job_id, action=x.action, eta=ref + timedelta(seconds=x.start),
+                  place_id=by_id[x.job_id].dropoff_place_id if x.action == "dropoff" else by_id[x.job_id].pickup_place_id,
+                  meters_from_prev=round(x.meters_from_prev, 2)) for x in route.stops]
+    late = [LateJob(job_id=x.job_id, minutes_late=m) for x in route.stops
+            if (m := _late_minutes(by_id[x.job_id], x, ref)) > 0]
+    return OrderOutcome(job_ids=[j.id for j in jobs], stops=stops, total_meters=round(route.meters, 2),
+                        late=sorted(late, key=lambda l: l.job_id))

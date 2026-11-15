@@ -1,7 +1,7 @@
 # v0: provisional, Benjamin to confirm
 from typing import Protocol
 
-from app.models.domain import Job, Place, Plan, Proposal, ReplanEvent, Route, StaffMember
+from app.models.domain import Job, Place, Plan, Proposal, ReplanEvent, Route, StaffMember, SwapComparison
 
 
 class Services(Protocol):
@@ -29,3 +29,9 @@ class Services(Protocol):
         ...
 
     def route_between(self, a_place_id: str, b_place_id: str) -> Route: ...
+
+    def compare_swap(self, staff_id: str, job_a: str, job_b: str) -> SwapComparison:
+        """Read-only: the staff member's current order vs the same jobs with job_a and job_b swapped.
+        Raises KeyError for an unknown staff id; ValueError if there's no current plan or a job isn't on
+        that staff member's route."""
+        ...

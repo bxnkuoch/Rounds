@@ -198,3 +198,33 @@ def test_agent_tools_run_on_real_services(svc):
     replan = json.loads(tools["propose_replan"].invoke({"kind": "job_added", "id": job.id}))
     assert job.id in replan["diff"]["added_job_ids"]
     assert json.loads(tools["route_between"].invoke({"a_place_id": "p0", "b_place_id": "p2"}))["meters"] == 20
+
+
+def test_compare_swap_replays_current_order_and_swap(svc):
+    plan = svc.apply_plan(svc.propose_plan().plan.id)
+    a = next(a for a in plan.assignments if len({s.job_id for s in a.stops}) >= 2)
+    order = list(dict.fromkeys(s.job_id for s in a.stops))
+    cmp = svc.compare_swap(a.staff_id, order[0], order[1])
+    # The current order replays to exactly the plan's stops and meters.
+    assert cmp.current_order.job_ids == order and cmp.plan_id == plan.id
+    assert [(s.job_id, s.action, s.place_id, s.eta) for s in cmp.current_order.stops] == [
+        (s.job_id, s.action, s.place_id, s.eta) for s in a.stops]
+    assert cmp.current_order.total_meters == round(sum(s.meters_from_prev for s in a.stops), 2)
+    assert cmp.swapped_order.job_ids == [order[1], order[0]] + order[2:]
+    assert cmp.meters_delta == round(cmp.swapped_order.total_meters - cmp.current_order.total_meters, 2)
+    assert cmp.late_jobs_delta == len(cmp.swapped_order.late) - len(cmp.current_order.late)
+    assert svc.get_current_plan().id == plan.id and len(svc._proposals) == 1  # read-only
+
+
+def test_compare_swap_errors(svc):
+    with pytest.raises(ValueError, match="no current plan"):
+        svc.compare_swap("SYN-RT-1", "SYN-J-001", "SYN-J-002")
+    plan = svc.apply_plan(svc.propose_plan().plan.id)
+    a = next(a for a in plan.assignments if a.stops)
+    other = next(s.job_id for b in plan.assignments if b.staff_id != a.staff_id for s in b.stops)
+    with pytest.raises(KeyError):
+        svc.compare_swap("nobody", a.stops[0].job_id, other)
+    with pytest.raises(ValueError, match="not on"):
+        svc.compare_swap(a.staff_id, a.stops[0].job_id, other)
+    with pytest.raises(ValueError, match="different"):
+        svc.compare_swap(a.staff_id, a.stops[0].job_id, a.stops[0].job_id)

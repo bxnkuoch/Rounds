@@ -10,8 +10,10 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 from app.agents import coordinator
-from app.agents.coordinator import GENERAL_PURPOSE_TOOL_NAMES, SCHEDULER_TOOL_NAMES, build_agent
-from app.agents.prompts import COORDINATOR_PROMPT, DISPATCH_TEMPLATES, SCHEDULER_PROMPT
+from app.agents.coordinator import (
+    EXPLAINER_TOOL_NAMES, GENERAL_PURPOSE_TOOL_NAMES, SCHEDULER_TOOL_NAMES, build_agent,
+)
+from app.agents.prompts import COORDINATOR_PROMPT, DISPATCH_TEMPLATES, EXPLAINER_PROMPT, SCHEDULER_PROMPT
 from tests.fakes import FakeServices, ScriptedChatModel
 
 USER = {"messages": [{"role": "user", "content": "Plan the shift."}]}
@@ -56,6 +58,11 @@ def test_scheduler_has_no_apply_plan():
     assert set(SCHEDULER_TOOL_NAMES) == {"list_jobs", "get_current_plan", "propose_plan", "propose_replan"}
 
 
+def test_explainer_is_read_only():
+    assert not {"apply_plan", "propose_plan", "propose_replan"} & set(EXPLAINER_TOOL_NAMES)
+    assert {"get_current_plan", "list_jobs", "route_between"} <= set(EXPLAINER_TOOL_NAMES)
+
+
 def test_general_purpose_has_no_apply_or_propose():
     assert "apply_plan" not in GENERAL_PURPOSE_TOOL_NAMES
     assert not {"propose_plan", "propose_replan"} & set(GENERAL_PURPOSE_TOOL_NAMES)
@@ -81,10 +88,12 @@ def test_create_deep_agent_kwargs(monkeypatch):
     assert captured["interrupt_on"] == {"apply_plan": {"allowed_decisions": ["approve", "reject"]}}
     assert [type(m).__name__ for m in captured["middleware"]] == ["TodoListMiddleware"]
     specs = {s["name"]: s for s in captured["subagents"]}
-    assert set(specs) == {"scheduler", "general-purpose"}
+    assert set(specs) == {"scheduler", "explainer", "general-purpose"}
     assert specs["scheduler"]["system_prompt"] == SCHEDULER_PROMPT
     assert [t.name for t in specs["scheduler"]["tools"]] == list(SCHEDULER_TOOL_NAMES)
     assert "never applies" in specs["scheduler"]["description"]
+    assert specs["explainer"]["system_prompt"] == EXPLAINER_PROMPT
+    assert [t.name for t in specs["explainer"]["tools"]] == list(EXPLAINER_TOOL_NAMES)
     assert [t.name for t in specs["general-purpose"]["tools"]] == list(GENERAL_PURPOSE_TOOL_NAMES)
     # No subagent holds apply_plan, and none carries its own gate: the coordinator is the single approval point.
     for spec in specs.values():
@@ -107,7 +116,7 @@ def _tool_names(agent) -> set[str]:
 
 
 def test_prompts_encode_rules():
-    for p in (COORDINATOR_PROMPT, SCHEDULER_PROMPT):
+    for p in (COORDINATOR_PROMPT, SCHEDULER_PROMPT, EXPLAINER_PROMPT):
         low = p.lower()
         assert "never" in low and "estimate" in low
         assert "infeasible" in low
@@ -190,6 +199,31 @@ def test_unscripted_subagent_apply_impossible():
     (err,) = _subagent_tool_messages(model)
     assert err.status == "error" and "apply_plan" in err.content and "not a valid tool" in err.content
     assert out["messages"][-1].content == "Done."
+
+
+def test_explainer_subagent_cannot_apply():
+    fake, model, out = _subagent_tries_apply("explainer")
+    assert "__interrupt__" not in out
+    assert fake.apply_calls == []
+    (err,) = _subagent_tool_messages(model)
+    assert err.status == "error" and "not a valid tool" in err.content
+
+
+def test_why_question_goes_to_explainer_and_changes_nothing():
+    script = [
+        call("task", {"description": "Why is J-1 before J-2?", "subagent_type": "explainer"}),
+        call("get_current_plan", {}),                       # explainer
+        say("J-1 is first: eta 08:00, 10.0 m from start."),  # explainer final
+        say("J-1 is first: eta 08:00, 10.0 m from start."),  # coordinator final
+    ]
+    fake, model, agent = _agent(script)
+    out = agent.invoke({"messages": [{"role": "user", "content": "Why is J-1 before J-2?"}]}, cfg())
+    assert "__interrupt__" not in out
+    assert fake.apply_calls == [] and fake.proposals == {}
+    # The explainer's get_current_plan ran and returned the real plan.
+    results = [m for msgs in model.calls for m in msgs if isinstance(m, ToolMessage) and m.name == "get_current_plan"]
+    assert results and '"id":"P-0"' in results[0].content
+    assert out["messages"][-1].content.startswith("J-1 is first")
 
 
 def test_general_purpose_subagent_cannot_bypass_approval():

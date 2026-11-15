@@ -104,6 +104,25 @@ class StaffUnavailable(BaseModel):
 ReplanEvent = Annotated[Union[JobAdded, StaffUnavailable], Field(discriminator="kind")]
 
 
+class OrderOutcome(BaseModel):
+    job_ids: list[str]
+    stops: list[Stop]
+    total_meters: float
+    late: list[LateJob]
+
+
+class SwapComparison(BaseModel):
+    """Additive (Benjamin): one staff member's current order vs the same jobs with two of them swapped,
+    replayed with the optimizer's travel model. Deltas are swapped minus current."""
+    plan_id: str
+    staff_id: str
+    swapped_job_ids: list[str]
+    current_order: OrderOutcome
+    swapped_order: OrderOutcome
+    meters_delta: float
+    late_jobs_delta: int
+
+
 class Route(BaseModel):
     from_place_id: str
     to_place_id: str

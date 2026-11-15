@@ -8,7 +8,8 @@ from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 
 from app.models.domain import (
-    Assignment, Baseline, Job, Place, Plan, PlanDiff, Proposal, ReplanEvent, Route, StaffMember, Stop,
+    Assignment, Baseline, Job, OrderOutcome, Place, Plan, PlanDiff, Proposal, ReplanEvent, Route, StaffMember, Stop,
+    SwapComparison,
 )
 
 T0 = datetime(2026, 1, 1, 8, 0)
@@ -95,6 +96,13 @@ class FakeServices:
 
     def route_between(self, a_place_id: str, b_place_id: str) -> Route:
         return Route(from_place_id=a_place_id, to_place_id=b_place_id, meters=10.0, node_ids=["N1", "N2"])
+
+    def compare_swap(self, staff_id: str, job_a: str, job_b: str) -> SwapComparison:
+        self.swap_calls = getattr(self, "swap_calls", []) + [(staff_id, job_a, job_b)]
+        same = OrderOutcome(job_ids=[job_a, job_b], stops=[], total_meters=20.0, late=[])
+        swapped = OrderOutcome(job_ids=[job_b, job_a], stops=[], total_meters=30.0, late=[])
+        return SwapComparison(plan_id=self.current_plan.id, staff_id=staff_id, swapped_job_ids=[job_a, job_b],
+                              current_order=same, swapped_order=swapped, meters_delta=10.0, late_jobs_delta=0)
 
 
 class ScriptedChatModel(BaseChatModel):

@@ -1,4 +1,4 @@
-"""The Deep Agent graph: coordinator + scheduler subagent, with apply_plan gated by human approval.
+"""The Deep Agent graph: coordinator + scheduler and explainer subagents, with apply_plan gated by human approval.
 
 Only the coordinator holds apply_plan, so there is one approval point. deepagents 0.7.38 would otherwise
 give its built-in `general-purpose` subagent a copy of every coordinator tool (including apply_plan), so we
@@ -16,12 +16,13 @@ from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import CompiledStateGraph
 
-from app.agents.prompts import COORDINATOR_PROMPT, SCHEDULER_PROMPT
+from app.agents.prompts import COORDINATOR_PROMPT, EXPLAINER_PROMPT, SCHEDULER_PROMPT
 from app.services.contract import Services
 from app.tools.rounds_tools import build_tools
 
 COORDINATOR_TOOL_NAMES = ("list_places", "list_staff", "list_jobs", "get_current_plan", "route_between", "apply_plan")
 SCHEDULER_TOOL_NAMES = ("list_jobs", "get_current_plan", "propose_plan", "propose_replan")
+EXPLAINER_TOOL_NAMES = ("get_current_plan", "list_jobs", "list_places", "list_staff", "route_between", "compare_swap")
 GENERAL_PURPOSE_TOOL_NAMES = ("list_places", "list_staff", "list_jobs", "get_current_plan", "route_between")
 
 INTERRUPT_ON = {"apply_plan": {"allowed_decisions": ["approve", "reject"]}}
@@ -41,6 +42,14 @@ def build_agent(services: Services, model: BaseChatModel, checkpointer: BaseChec
         "tools": pick(SCHEDULER_TOOL_NAMES),
         "interrupt_on": {},
     }
+    explainer: SubAgent = {
+        "name": "explainer",
+        "description": "Explains why the current plan orders and times jobs as it does, quoting plan, job-window "
+                       "and route numbers. Read-only: it never proposes or applies plans.",
+        "system_prompt": EXPLAINER_PROMPT,
+        "tools": pick(EXPLAINER_TOOL_NAMES),
+        "interrupt_on": {},
+    }
     general_purpose: SubAgent = {
         **GENERAL_PURPOSE_SUBAGENT, "tools": pick(GENERAL_PURPOSE_TOOL_NAMES), "interrupt_on": {},
     }
@@ -50,7 +59,7 @@ def build_agent(services: Services, model: BaseChatModel, checkpointer: BaseChec
         tools=pick(COORDINATOR_TOOL_NAMES),
         system_prompt=COORDINATOR_PROMPT,
         middleware=[TodoListMiddleware()],
-        subagents=[scheduler, general_purpose],
+        subagents=[scheduler, explainer, general_purpose],
         interrupt_on=INTERRUPT_ON,
         checkpointer=checkpointer,
     )

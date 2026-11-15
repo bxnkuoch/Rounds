@@ -14,10 +14,10 @@ import threading
 from datetime import datetime
 
 from app.models.domain import (
-    Job, JobAdded, Place, Plan, Proposal, ReplanEvent, Route, StaffMember, StaffUnavailable,
+    Job, JobAdded, Place, Plan, Proposal, ReplanEvent, Route, StaffMember, StaffUnavailable, SwapComparison,
 )
 from app.optimization import DEFAULT_WALKING_SPEED_MPS
-from app.services.planning import make_diff, solve_plan
+from app.services.planning import make_diff, replay_order, solve_plan
 from app.spatial.nav_graph import NavGraph
 from app.synthetic import ROLE_FOR_KIND, SERVICE_MINUTES, Scenario
 
@@ -88,6 +88,33 @@ class RoundsServices:
                 raise KeyError(f"unknown place_id {pid!r}")
         meters, nodes = self.graph.shortest_path(self._places[a_place_id].node_id, self._places[b_place_id].node_id)
         return Route(from_place_id=a_place_id, to_place_id=b_place_id, meters=round(meters, 2), node_ids=nodes)
+
+    def compare_swap(self, staff_id: str, job_a: str, job_b: str) -> SwapComparison:
+        """Read-only "what if": replay `staff_id`'s jobs in the current plan's order, and again with `job_a`
+        and `job_b` swapped, from the plan's start time. Nothing is proposed or applied."""
+        with self._lock:
+            plan = self.get_current_plan()
+            if plan is None:
+                raise ValueError("there is no current plan; propose and apply one first")
+            if staff_id not in self._staff:
+                raise KeyError(f"unknown staff_id {staff_id!r}")
+            stops = next((a.stops for a in plan.assignments if a.staff_id == staff_id), [])
+            order = list(dict.fromkeys(s.job_id for s in stops))
+            for j in (job_a, job_b):
+                if j not in order:
+                    raise ValueError(f"{j} is not on {staff_id}'s route in plan {plan.id}; its jobs are {order}")
+            if job_a == job_b:
+                raise ValueError("job_a and job_b must be different jobs")
+            swapped = list(order)
+            i, k = order.index(job_a), order.index(job_b)
+            swapped[i], swapped[k] = swapped[k], swapped[i]
+            staff = self._staff[staff_id]
+            current, other = (replay_order(self.graph, staff, [self._jobs[j] for j in o], plan.created_at,
+                                           self.walking_speed_mps) for o in (order, swapped))
+            return SwapComparison(plan_id=plan.id, staff_id=staff_id, swapped_job_ids=[job_a, job_b],
+                                  current_order=current, swapped_order=other,
+                                  meters_delta=round(other.total_meters - current.total_meters, 2),
+                                  late_jobs_delta=len(other.late) - len(current.late))
 
     # ---- proposals (no side effects on the schedule) -------------------------
 

@@ -1,5 +1,5 @@
 # v0 stub: Benjamin replaces the NotImplementedError bodies.
-from app.models.domain import Job, Place, Plan, Proposal, ReplanEvent, Route, StaffMember
+from app.models.domain import Job, Place, Plan, Proposal, ReplanEvent, Route, StaffMember, SwapComparison
 from app.spatial.nav_graph import NavGraph
 
 
@@ -48,3 +48,6 @@ class StubServices:
 
     def apply_plan(self, plan_id: str) -> Plan:
         raise _todo("apply_plan")
+
+    def compare_swap(self, staff_id: str, job_a: str, job_b: str) -> SwapComparison:
+        raise _todo("compare_swap")
