@@ -4,7 +4,7 @@ Ownership paths are in `AGENTS.md` §3; the agent↔backend boundary is in §3.1
 
 ## Step 0: agree on the contract together (~30 min, before splitting)
 
-Draft for Benjamin to confirm or change. Nothing below is built yet. Models go in `backend/app/models/`, functions in `backend/app/services/`.
+Draft for Benjamin to confirm or change. The models are in `backend/app/models/` (v0, provisional) and the service seam is `backend/app/services/contract.py` (a `Services` Protocol; `StubServices` stands in until Benjamin's implementation lands).
 
 **Models (Pydantic)**
 - `Place`: `id`, `name`, `kind` (`label|tag|synthetic`), `node_id`, `room_id`, `is_synthetic`. Comes from `NavGraph.places`, plus any synthetic ones we add.
@@ -19,12 +19,12 @@ Draft for Benjamin to confirm or change. Nothing below is built yet. Models go i
 list_places() -> list[Place]
 list_staff() -> list[StaffMember]
 list_jobs(status: str | None = None) -> list[Job]
-get_current_plan() -> Plan
-propose_plan(job_ids: list[str] | None = None) -> Plan            # optimizer, no side effects
-propose_replan(event: ReplanEvent) -> tuple[Plan, PlanDiff]        # e.g. new STAT job, staff unavailable
-apply_plan(plan_id: str) -> Plan                                  # only after human approval
+get_current_plan() -> Plan | None                                 # None until a plan has been applied
+propose_plan(job_ids: list[str] | None = None) -> Proposal        # optimizer; stores the proposal, does not apply it
+propose_replan(event: ReplanEvent) -> Proposal                    # e.g. new STAT job, staff unavailable; stores the proposal
+get_proposal(plan_id: str) -> Proposal                            # the proposed plan + its PlanDiff; raises KeyError for an unknown id. The approval card is built from this, never from model args
+apply_plan(plan_id: str) -> Plan                                  # only after human approval. KeyError: unknown id. ValueError: already applied, or stale (the proposal's diff.from_plan_id is not the current plan)
 route_between(a_place_id: str, b_place_id: str) -> Route          # meters + node path, for UI/explanations
-get_proposal(plan_id: str) -> Proposal                            # the proposed plan + its PlanDiff; the approval card is built from this, never from model args
 ```
 
 ## Minh: FastAPI agent endpoints + Deep Agent

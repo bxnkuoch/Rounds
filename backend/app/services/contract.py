@@ -24,7 +24,8 @@ class Services(Protocol):
         ...
 
     def apply_plan(self, plan_id: str) -> Plan:
-        """Raises KeyError if unknown, ValueError if already applied."""
+        """Raises KeyError if unknown; ValueError if already applied or stale (the proposal's
+        diff.from_plan_id is not the current plan)."""
         ...
 
     def route_between(self, a_place_id: str, b_place_id: str) -> Route: ...
