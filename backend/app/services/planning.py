@@ -28,6 +28,16 @@ def _late_minutes(job: Job, stop: OptStop, ref: datetime) -> int:
     return math.ceil(over / 60) if over > 0 else 0
 
 
+def _opt_job(j: Job, node_of: dict[str, str], ref: datetime) -> OptJob:
+    """A contract Job as optimizer input, with times in seconds from `ref` (past times clamp to 0)."""
+    def secs(t: datetime | None) -> int | None:
+        return None if t is None else max(0, int((t - ref).total_seconds()))
+
+    return OptJob(j.id, node_of[j.pickup_place_id], node_of[j.dropoff_place_id] if j.dropoff_place_id else None,
+                  earliest=secs(j.earliest), latest=secs(j.latest), service_s=j.service_minutes * 60,
+                  priority=j.priority)
+
+
 def _late(sol: Solution, jobs: dict[str, Job], ref: datetime) -> list[LateJob]:
     out = []
     for r in sol.routes:
@@ -66,11 +76,7 @@ def solve_plan(graph: NavGraph, staff: list[StaffMember], jobs: list[Job], now: 
             node_to_place.setdefault(pickup, j.pickup_place_id)
             if drop:
                 node_to_place.setdefault(drop, j.dropoff_place_id)
-            opt_jobs.append(OptJob(
-                j.id, pickup, drop,
-                earliest=None if j.earliest is None else max(0, secs(j.earliest)),
-                latest=None if j.latest is None else max(0, secs(j.latest)),
-                service_s=j.service_minutes * 60, priority=j.priority))
+            opt_jobs.append(_opt_job(j, node_of, now))
         if not opt_jobs:
             continue
         opt = optimize(opt_staff, opt_jobs, graph.distance_matrix, walking_speed_mps)
@@ -136,10 +142,7 @@ def replay_order(graph: NavGraph, staff: StaffMember, jobs: list[Job], ref: date
     node_of = {pid: p.node_id for pid, p in graph.places.items()}
     opt_staff = OptStaff(staff.id, node_of[staff.start_place_id], max(0, secs(staff.shift_start)),
                          secs(staff.shift_end))
-    opt_jobs = [OptJob(j.id, node_of[j.pickup_place_id], node_of[j.dropoff_place_id] if j.dropoff_place_id else None,
-                       earliest=None if j.earliest is None else max(0, secs(j.earliest)),
-                       latest=None if j.latest is None else max(0, secs(j.latest)),
-                       service_s=j.service_minutes * 60, priority=j.priority) for j in jobs]
+    opt_jobs = [_opt_job(j, node_of, ref) for j in jobs]
     route, _ = simulate_order(opt_staff, opt_jobs, graph.distance_matrix, walking_speed_mps)
     by_id = {j.id: j for j in jobs}
     stops = [Stop(job_id=x.job_id, action=x.action, eta=ref + timedelta(seconds=x.start),
