@@ -11,12 +11,12 @@ Both go in repo-root `local.env` (gitignored; real environment variables overrid
 - `ANTHROPIC_API_KEY`: required to run the agent. Without it, a message run yields `error(code="model_unavailable")` then `done`; the rest of the app keeps working.
 - `AGENT_MODEL`: optional, default `anthropic:claude-haiku-5-5`.
 
-## Run the dev app
+## Run
 
-Until `main.py` mounts the router, use the dev-only app (from `backend/`). It needs no key to start; the model is built lazily on the first run:
+`app/main.py` mounts this router next to the domain API (from `backend/`). It needs no key to start; the model is built lazily on the first run:
 
 ```bash
-uv run uvicorn app.agent_dev_app:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000
 ```
 
 ## Endpoints (SSE responses; use `curl -N`)
