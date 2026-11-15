@@ -4,7 +4,7 @@ Ownership paths are in `AGENTS.md` §3; the agent↔backend boundary is in §3.1
 
 ## Step 0: agree on the contract together (~30 min, before splitting)
 
-Draft for Benjamin to confirm or change. Nothing below is built yet. Models go in `backend/app/models/`, functions in `backend/app/services/`.
+Draft for Benjamin to confirm or change. The models are in `backend/app/models/` (v0, provisional) and the service seam is `backend/app/services/contract.py` (a `Services` Protocol; `StubServices` stands in until Benjamin's implementation lands).
 
 **Models (Pydantic)**
 - `Place`: `id`, `name`, `kind` (`label|tag|synthetic`), `node_id`, `room_id`, `is_synthetic`. Comes from `NavGraph.places`, plus any synthetic ones we add.
@@ -19,10 +19,11 @@ Draft for Benjamin to confirm or change. Nothing below is built yet. Models go i
 list_places() -> list[Place]
 list_staff() -> list[StaffMember]
 list_jobs(status: str | None = None) -> list[Job]
-get_current_plan() -> Plan
-propose_plan(job_ids: list[str] | None = None) -> Plan            # optimizer, no side effects
-propose_replan(event: ReplanEvent) -> tuple[Plan, PlanDiff]        # e.g. new STAT job, staff unavailable
-apply_plan(plan_id: str) -> Plan                                  # only after human approval
+get_current_plan() -> Plan | None                                 # None until a plan has been applied
+propose_plan(job_ids: list[str] | None = None) -> Proposal        # optimizer; stores the proposal, does not apply it
+propose_replan(event: ReplanEvent) -> Proposal                    # e.g. new STAT job, staff unavailable; stores the proposal
+get_proposal(plan_id: str) -> Proposal                            # the proposed plan + its PlanDiff; raises KeyError for an unknown id. The approval card is built from this, never from model args
+apply_plan(plan_id: str) -> Plan                                  # only after human approval. KeyError: unknown id. ValueError: already applied, or stale (the proposal's diff.from_plan_id is not the current plan)
 route_between(a_place_id: str, b_place_id: str) -> Route          # meters + node path, for UI/explanations
 ```
 
@@ -30,13 +31,13 @@ route_between(a_place_id: str, b_place_id: str) -> Route          # meters + nod
 
 Read `deepagents-notes.md` and check the docs MCP servers first (AGENTS.md §6).
 
-- [ ] Add `deepagents`, `langchain-aws` (Bedrock) and `fastapi` deps. Coordinate the `pyproject.toml` edit with Benjamin; `uv add` in one commit.
-- [ ] `backend/app/agents/`: build the Deep Agent on Bedrock with a system prompt that encodes the product rules (no clinical decisions, no invented data, IDs only).
-- [ ] `backend/app/tools/`: thin tools over the service functions above. Stub the services that don't exist yet.
-- [ ] HITL: `interrupt_on` for `apply_plan`. Resume with approve/reject/edit.
-- [ ] `backend/app/api/agent.py`: `POST /agent/chat` (streamed), `POST /agent/approvals/{id}` (approve/reject), and thread/session handling via a checkpointer.
-- [ ] Bedrock failure path: the app keeps working without the agent (AGENTS.md §7).
-- [ ] Tests: tools call services with the right args; a reject never calls `apply_plan`.
+- [x] Add `deepagents`, `langchain-anthropic` and `fastapi` deps. Coordinate the `pyproject.toml` edit with Benjamin; `uv add` in one commit.
+- [x] `backend/app/agents/`: build the Deep Agent on Claude Haiku 5.5 (Anthropic API, `AGENT_MODEL` configurable) with a system prompt that encodes the product rules (no clinical decisions, no invented data, IDs only).
+- [x] `backend/app/tools/`: thin tools over the service functions above. Stub the services that don't exist yet.
+- [x] HITL: `interrupt_on` for `apply_plan`. Resume with approve/reject (no `edit` decision this stage).
+- [x] `backend/app/api/agent.py`: SSE endpoints `POST /agent/threads`, `/threads/{id}/messages`, `/events`, `/approvals/{approval_id}` and `GET /threads/{id}/state`, with thread handling via a checkpointer. See `backend/app/agents/README.md`.
+- [x] Model failure path (no key -> `error(model_unavailable)`): the app keeps working without the agent (AGENTS.md §7).
+- [x] Tests: tools call services with the right args; a reject never calls `apply_plan`.
 
 ## Benjamin: optimizer, main backend, frontend
 

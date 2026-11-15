@@ -4,11 +4,23 @@ version = "0.1.0"
 description = "Rounds backend: FastAPI, optimizer, routing, spatial"
 requires-python = ">=3.11"
 dependencies = [
+    "anthropic>=2.8.0",
+    "anyio>=4.16.0",
+    "deepagents>=0.7.38",
+    "fastapi>=0.163.0",
+    "langchain-anthropic>=1.7.10",
+    "langchain>=1.5",
+    "langgraph>=1.2.22",
     "ortools>=9.15.6755",
+    "pydantic>=2.14.3",
+    "uvicorn>=0.54.0",
 ]
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = [
+    "httpx2>=2.16.0",
+    "pytest>=8",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
