@@ -86,7 +86,7 @@ Rounds tells each staff member **what to do next, when, and the best way to get 
 
 - [ ] Can we get a Matterport model that looks like a hospital or clinic? If not, which building do we use, and how do we label it honestly?
 - [ ] Does the Matterport API expose doors and room adjacency? This decides whether the navigation graph is auto-generated or hand-drawn on top of the model.
-- [x] Model: Claude Haiku 5.5 via the Anthropic API (tool calling works; configurable with `AGENT_MODEL`). No Bedrock, so we make no Amazon track claim.
+- [x] Model: Claude Haiku 5.5 via the Anthropic API (configurable with `AGENT_MODEL`; real-key smoke run pending). No Bedrock, so we make no Amazon track claim.
 - [x] Pickup-and-delivery (transport) is **in the MVP**: OR-Tools pickup-and-delivery with time windows, one-bed capacity, and accessible-only edges for bed and wheelchair moves.
 - [ ] Do transport jobs take accessible-only routes for every job, or only when a bed or wheelchair is involved? (Suggest: a per-job `requires_accessible` flag.)
 - [ ] Find a clinician on site for a validation quote.

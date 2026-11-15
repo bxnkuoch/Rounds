@@ -45,7 +45,7 @@ Status codes: 404 unknown thread; 409 thread busy or awaiting approval (on messa
 
 ## Event contract (summary)
 
-Each SSE frame is `data: <json>\n\n`. Every event has `type`, `thread_id`, `seq`, `source` (`coordinator` or a subagent name). Types:
+Each SSE frame is `data: <json>\n\n`. Every event has `type`, `thread_id`, `seq`, `source` (`coordinator` or `subagent:<name>`, e.g. `subagent:scheduler`). Types:
 
 | type | extra fields |
 |---|---|
@@ -58,7 +58,9 @@ Each SSE frame is `data: <json>\n\n`. Every event has `type`, `thread_id`, `seq`
 | `approval_required` | `approval_id`, `plan_id`, `plan_diff`, `rationale`, `allowed` (`approve`/`reject`) |
 | `message` | `text` (the final assistant message) |
 | `done` | `status`: `completed` or `awaiting_approval` |
-| `error` | `code`, `message`, `retryable` (e.g. `model_unavailable`, `thread_busy`, `stale_approval`) |
+| `error` | `code`, `message`, `retryable` (see below) |
+
+Error codes: `model_unavailable` (no key or model could not be built), `model_error` (Anthropic API failure; `retryable` set for rate limit, 529, 5xx, connection), `internal_error` (any other failure in a run or in reading thread state), `unknown_plan` (the agent asked to apply a proposal that does not exist or could not be loaded; auto-rejected, nothing applied), `input_not_sent` (retryable; your message never ran, resend it), `thread_busy` and `stale_approval` (a 409 status normally; in-stream only if a race is lost after the check passed). Every run ends with `done` even after an error.
 
 A run ends with `done`. After `done(awaiting_approval)`, POST the approval to resume. The approval card's `plan_diff` comes from `services.get_proposal(plan_id)`, never from model arguments.
 
@@ -68,7 +70,8 @@ A run ends with `done`. After `done(awaiting_approval)`, POST the approval to re
 - `seq` restarts at 0 every run, so order events per run (use `run_id`), not per thread.
 - `ThreadState` and `ChatLine` (the `GET /state` contract) are in `app/models/agent_events.py`, v0 provisional like the event models.
 - The stub services (`StubServices`) raise `NotImplementedError` except `list_places` and `route_between`; the agent reports the failed tool call instead of inventing a plan until Benjamin implements the services.
-- Place and route tools need the Airedale nav graph export (`backend/data/raw/matterport/6Ee2LwLfx58.json`, gitignored). Without it they return errors.
+- Place and route tools need the Airedale nav graph export (`data/raw/matterport/6Ee2LwLfx58.json` at the repo root (not under `backend/`), gitignored). Without it they return errors.
+- If the client disconnects while an approved `apply_plan` is running, the service may apply the plan without the checkpoint recording the ToolMessage. The service's `ValueError` still blocks a double apply.
 - `edit` decisions on approvals are not supported this stage.
 
 ## Real-key smoke run (not done yet)
