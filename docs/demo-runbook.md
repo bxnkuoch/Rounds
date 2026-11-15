@@ -32,7 +32,3 @@ Total agent waiting is about 50 s, so narrate during the waits: the todo list, t
 - **No API key, or the model is down:** the agent tab shows `model_unavailable`, and everything else keeps working. In **Dispatch**, untick *Send new requests to the agent* to re-optimize directly; Optimize → Approve still works.
 - Late jobs: with seed 0, nothing is late. To show a late flag, dispatch a job with **Due by** set before the sim time. It is still scheduled and flagged late, never dropped.
 - Before the demo, do a visual check of the 15 out-of-room place labels in the 3D tour (`docs/handoff-2026-11-15.md`, caveat 2).
-
-## Still open
-
-- Whether we may use the public Airedale tour for the demo (`docs/task-split.md`, "Both: decide later"). Ask the CoStar/Matterport sponsor team.
