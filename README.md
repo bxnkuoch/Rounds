@@ -79,7 +79,7 @@ Vite proxies `/api` and `/agent` to the backend on :8000.
 
 The building export (`data/raw/matterport/6Ee2LwLfx58.json`, gitignored; see `docs/handoff-2026-11-15.md`) is loaded at startup. Without it, `/api` returns 503 and the agent still starts.
 
-`backend/app/agents/README.md` has an example for every endpoint and the full event contract.
+`backend/app/agents/README.md` has an example for every endpoint and the full event contract. To present the demo, follow `docs/demo-runbook.md`.
 
 ## Configuration
 

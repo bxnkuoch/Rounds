@@ -48,7 +48,13 @@ export default function App() {
   useEffect(() => {
     if (!ag.pending) { setAgentPreview(null); return }
     setTab('agent')
-    api.proposal(ag.pending.plan_id).then(setAgentPreview).catch(() => setAgentPreview(null))
+    // Ignore a response that arrives after this card was decided or replaced, so a stale plan never
+    // shows on the next card or the map.
+    let live = true
+    api.proposal(ag.pending.plan_id)
+      .then(p => { if (live) setAgentPreview(p) })
+      .catch(() => { if (live) setAgentPreview(null) })
+    return () => { live = false }
   }, [ag.pending])
 
   const guard = async (fn: () => Promise<void>) => {

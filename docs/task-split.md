@@ -50,6 +50,7 @@ Read `docs/handoff-2026-11-15.md` first. It covers the nav graph, the exporter, 
 - [x] `backend/app/services/`: implement the contract above.
 - [x] `backend/app/main.py` + `backend/app/api/`: app setup, CORS, endpoints for places/staff/jobs/plans/routes, and loading the nav graph at startup.
 - [x] Frontend: pick the framework (it's still TBD in AGENTS.md §4; update it there). Then build the 2D floor plan with routes, the Matterport Showcase view (localhost only), the plan view, the chat panel, and the approval card.
+- [x] Full demo rehearsal with a real key, in a browser: see `docs/demo-runbook.md`.
 
 ## Both: decide later
 
