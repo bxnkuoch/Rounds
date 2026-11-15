@@ -114,9 +114,11 @@ def test_prompts_encode_rules():
         assert "clinical" in low
         assert " id" in low
     assert "apply_plan" in COORDINATOR_PROMPT and "approv" in COORDINATOR_PROMPT.lower()
+    # Calling apply_plan is the approval request (the card); the agent must not ask in chat instead.
+    assert "Calling apply_plan IS how you ask for approval" in COORDINATOR_PROMPT
     assert DISPATCH_TEMPLATES == {
-        "job_added": "Dispatch: new job {job_id} arrived. Propose a replan.",
-        "staff_unavailable": "Dispatch: staff {staff_id} is unavailable. Propose a replan.",
+        "job_added": "Dispatch: new job {job_id} arrived. Propose a replan and submit it for approval.",
+        "staff_unavailable": "Dispatch: staff {staff_id} is unavailable. Propose a replan and submit it for approval.",
     }
 
 

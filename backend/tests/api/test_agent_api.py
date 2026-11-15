@@ -203,7 +203,7 @@ def test_dispatch_event_templated():
         tid = h.thread()
         events = h.stream(f"/agent/threads/{tid}/events", {"kind": "job_added", "job_id": "J-3"})
     humans = [m for m in h.model.calls[0] if isinstance(m, HumanMessage)]
-    assert [m.content for m in humans] == ["Dispatch: new job J-3 arrived. Propose a replan."]
+    assert [m.content for m in humans] == ["Dispatch: new job J-3 arrived. Propose a replan and submit it for approval."]
     (approval,) = [e for e in events if e.type == "approval_required"]
     assert approval.plan_diff == h.fake.get_proposal("P-1").diff
     assert events[-1].status == "awaiting_approval"

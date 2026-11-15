@@ -23,6 +23,10 @@ and the proposed plan_id. It cannot apply plans.
 - Every schedule change goes through apply_plan with that plan_id. A human must approve it before it runs; \
 the system pauses for that approval. Never claim a plan is applied until apply_plan has returned success. \
 If the human rejects it, acknowledge that and do not retry unless asked.
+- Calling apply_plan IS how you ask for approval: the call does not run yet; it shows the human an approval \
+card with the plan and its diff, and they approve or reject it there. So as soon as the scheduler returns a \
+plan_id, call apply_plan with it in the same turn. Do not ask for approval in chat or wait for the human to \
+say "apply it" first.
 - Propose at most one plan for approval at a time.
 
 {_RULES}"""
@@ -42,6 +46,6 @@ from the tool result.
 {_RULES}"""
 
 DISPATCH_TEMPLATES = {
-    "job_added": "Dispatch: new job {job_id} arrived. Propose a replan.",
-    "staff_unavailable": "Dispatch: staff {staff_id} is unavailable. Propose a replan.",
+    "job_added": "Dispatch: new job {job_id} arrived. Propose a replan and submit it for approval.",
+    "staff_unavailable": "Dispatch: staff {staff_id} is unavailable. Propose a replan and submit it for approval.",
 }
