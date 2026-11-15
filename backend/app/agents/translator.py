@@ -165,12 +165,15 @@ class EventTranslator:
         for action in intr.value.get("action_requests", []):
             if action.get("name") != "apply_plan":
                 continue
-            plan_id = action["args"]["plan_id"]
+            args = action.get("args")
+            plan_id = args.get("plan_id") if isinstance(args, dict) else None
             try:
+                if not isinstance(plan_id, str):
+                    raise KeyError(plan_id)
                 diff = self.services.get_proposal(plan_id).diff
             except KeyError:
                 return [self.emit(Error, source=source, code="unknown_plan", retryable=False,
-                                  message=f"Proposal {plan_id} does not exist.")]
+                                  message=f"Proposal {plan_id!r} does not exist.")]
             return [self.emit(
                 ApprovalRequired, source=source, approval_id=intr.id, plan_id=plan_id, plan_diff=diff,
                 rationale=self._buf or self._last_text, allowed=["approve", "reject"],

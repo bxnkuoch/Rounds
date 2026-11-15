@@ -195,3 +195,75 @@ def test_integration_scripted_run():
     assert approval.plan_id == "P-1" and approval.rationale == ""
     assert [e.seq for e in events] == list(range(len(events)))
     assert fake.apply_calls == []
+
+
+def test_interrupt_malformed_args_is_error_not_raise():
+    _, t = tr()
+    for args in ({}, {"plan_id": None}, {"plan_id": 5}, None):
+        (ev,) = t.feed(interrupt_chunk(args))
+        assert isinstance(ev, Error) and ev.code == "unknown_plan" and ev.retryable is False
+
+
+def test_interleaved_namespaces_metadata_beats_fifo():
+    """Real shape: uuid namespaces, lc_agent_name in messages metadata. FIFO alone would misattribute."""
+    _, t = tr()
+    t.feed(((), "updates", {"model": {"messages": [AIMessage(content="", tool_calls=[
+        {"name": "task", "args": {"description": "d", "subagent_type": "scheduler"}, "id": "c1"},
+        {"name": "task", "args": {"description": "d", "subagent_type": "general-purpose"}, "id": "c2"},
+    ])]}}))
+    nsA, nsB = ("tools:uuid-a",), ("tools:uuid-b",)
+    # general-purpose (the SECOND call) speaks first; FIFO would call uuid-b "scheduler".
+    t.feed((nsB, "messages", (AIMessageChunk(content=""), {"lc_agent_name": "general-purpose"})))
+    t.feed((nsA, "messages", (AIMessageChunk(content=""), {"lc_agent_name": "scheduler"})))
+    ca = AIMessage(content="", tool_calls=[{"name": "propose_plan", "args": {}, "id": "pa"}])
+    cb = AIMessage(content="", tool_calls=[{"name": "list_jobs", "args": {}, "id": "pb"}])
+    (eb,) = t.feed((nsB, "updates", {"model": {"messages": [cb]}}))
+    (ea,) = t.feed((nsA, "updates", {"model": {"messages": [ca]}}))
+    assert eb.source == "subagent:general-purpose" and ea.source == "subagent:scheduler"
+    (rb,) = t.feed((nsB, "updates", {"tools": {"messages": [ToolMessage(content="ok", name="list_jobs", tool_call_id="pb")]}}))
+    assert rb.source == "subagent:general-purpose"
+
+
+class RoutedModel(ScriptedChatModel):
+    """Per-agent scripts, routed by a marker in the task description, so parallel subagents are deterministic."""
+
+    queues: dict = {}
+
+    def _take(self, messages):
+        text = " ".join(m.content for m in messages if isinstance(m.content, str))
+        key = "sched" if "SCHED-JOB" in text else "gp" if "GP-JOB" in text else "coord"
+        self.calls.append(list(messages))
+        return self.queues[key].pop(0)
+
+
+def test_integration_parallel_subagent_sources():
+    def tcs(*calls):
+        return AIMessage(content="", tool_calls=[{"name": n, "args": a, "id": i} for n, a, i in calls])
+
+    model = RoutedModel([], queues={
+        "coord": [
+            tcs(("task", {"description": "SCHED-JOB", "subagent_type": "scheduler"}, "c1"),
+                ("task", {"description": "GP-JOB", "subagent_type": "general-purpose"}, "c2")),
+            AIMessage(content="All done."),
+        ],
+        "sched": [tcs(("propose_plan", {}, "pp")), AIMessage(content="sched done")],
+        "gp": [tcs(("list_jobs", {}, "lj")), AIMessage(content="gp done")],
+    })
+    fake = FakeServices()
+    agent = build_agent(fake, model, InMemorySaver())
+    t = EventTranslator("t-par", fake)
+    events = []
+    for chunk in agent.stream(
+        {"messages": [{"role": "user", "content": "go"}]},
+        {"configurable": {"thread_id": f"t-{uuid.uuid4().hex}"}},
+        stream_mode=["messages", "updates"], subgraphs=True,
+    ):
+        events += t.feed(chunk)
+    by = {(e.type, e.name): e.source for e in events if e.type in ("tool_call", "tool_result")}
+    assert by[("tool_call", "propose_plan")] == "subagent:scheduler"
+    assert by[("tool_result", "propose_plan")] == "subagent:scheduler"
+    assert by[("tool_call", "list_jobs")] == "subagent:general-purpose"
+    assert by[("tool_result", "list_jobs")] == "subagent:general-purpose"
+    assert by[("tool_call", "task")] == by[("tool_result", "task")] == "coordinator"
+    assert {e.subagent for e in events if e.type == "subagent_finished"} == {"scheduler", "general-purpose"}
+    assert "".join(e.text for e in events if e.type == "token") == "All done."
