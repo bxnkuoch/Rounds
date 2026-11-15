@@ -81,7 +81,7 @@ We build this against stubbed services so Benjamin's frontend can integrate agai
   - Infeasible jobs are always reported, never dropped.
   - No clinical judgments; priorities come from the data.
   - Refer to jobs, places and staff by ID and name only.
-- **Other built-in tools:** the built-in `general-purpose` subagent and the filesystem tools stay at their defaults this stage. Exposing the filesystem tools is harmless with the in-memory state backend; to be revisited next stage.
+- **Other built-in tools:** the filesystem tools stay at their defaults this stage. The built-in `general-purpose` subagent is overridden in `coordinator.py` with read-only tools and `interrupt_on={}`, because the default one inherited `apply_plan` and the approval gate. Exposing the filesystem tools is harmless with the in-memory state backend; to be revisited next stage.
 
 ### Tools (`backend/app/tools/`)
 
@@ -207,7 +207,7 @@ Until `main.py` exists, Minh ships a tiny `app/agent_dev_app.py` that mounts onl
 
 **Builder's calls (marked by Minh's agent while writing):**
 - No `edit` decision this stage.
-- Default filesystem and general-purpose subagent left on.
+- Default filesystem tools left on; the general-purpose subagent is overridden with read-only tools (it inherited `apply_plan` otherwise), and subagents get `interrupt_on={}`.
 - Dev-only app file until `main.py` exists.
 - `get_proposal` added to the contract.
 - v0 provisional schemas.

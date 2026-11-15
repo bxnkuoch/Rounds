@@ -24,19 +24,20 @@ propose_plan(job_ids: list[str] | None = None) -> Plan            # optimizer, n
 propose_replan(event: ReplanEvent) -> tuple[Plan, PlanDiff]        # e.g. new STAT job, staff unavailable
 apply_plan(plan_id: str) -> Plan                                  # only after human approval
 route_between(a_place_id: str, b_place_id: str) -> Route          # meters + node path, for UI/explanations
+get_proposal(plan_id: str) -> Proposal                            # the proposed plan + its PlanDiff; the approval card is built from this, never from model args
 ```
 
 ## Minh: FastAPI agent endpoints + Deep Agent
 
 Read `deepagents-notes.md` and check the docs MCP servers first (AGENTS.md §6).
 
-- [ ] Add `deepagents`, `langchain-aws` (Bedrock) and `fastapi` deps. Coordinate the `pyproject.toml` edit with Benjamin; `uv add` in one commit.
-- [ ] `backend/app/agents/`: build the Deep Agent on Bedrock with a system prompt that encodes the product rules (no clinical decisions, no invented data, IDs only).
-- [ ] `backend/app/tools/`: thin tools over the service functions above. Stub the services that don't exist yet.
-- [ ] HITL: `interrupt_on` for `apply_plan`. Resume with approve/reject/edit.
-- [ ] `backend/app/api/agent.py`: `POST /agent/chat` (streamed), `POST /agent/approvals/{id}` (approve/reject), and thread/session handling via a checkpointer.
-- [ ] Bedrock failure path: the app keeps working without the agent (AGENTS.md §7).
-- [ ] Tests: tools call services with the right args; a reject never calls `apply_plan`.
+- [x] Add `deepagents`, `langchain-anthropic` and `fastapi` deps. Coordinate the `pyproject.toml` edit with Benjamin; `uv add` in one commit.
+- [x] `backend/app/agents/`: build the Deep Agent on Claude Haiku 5.5 (Anthropic API, `AGENT_MODEL` configurable) with a system prompt that encodes the product rules (no clinical decisions, no invented data, IDs only).
+- [x] `backend/app/tools/`: thin tools over the service functions above. Stub the services that don't exist yet.
+- [x] HITL: `interrupt_on` for `apply_plan`. Resume with approve/reject (no `edit` decision this stage).
+- [x] `backend/app/api/agent.py`: SSE endpoints `POST /agent/threads`, `/threads/{id}/messages`, `/events`, `/approvals/{approval_id}` and `GET /threads/{id}/state`, with thread handling via a checkpointer. See `backend/app/agents/README.md`.
+- [x] Model failure path (no key -> `error(model_unavailable)`): the app keeps working without the agent (AGENTS.md §7).
+- [x] Tests: tools call services with the right args; a reject never calls `apply_plan`.
 
 ## Benjamin: optimizer, main backend, frontend
 
