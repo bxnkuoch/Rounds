@@ -11,6 +11,11 @@ type Props = {
   onNewShift: () => void
 }
 
+/** Model replies use **bold**; show it as bold instead of raw asterisks (no other markdown, no HTML). */
+function bold(text: string) {
+  return text.split(/\*\*(.+?)\*\*/g).map((part, i) => (i % 2 ? <b key={i}>{part}</b> : part))
+}
+
 const STYLE: Record<LogLine['kind'], string> = {
   user: 'ml-8 bg-slate-900 text-white',
   assistant: 'mr-8 bg-white border border-slate-200',
@@ -43,10 +48,10 @@ export function AgentChat({ log, draft, todos, busy, onSend, onNewShift }: Props
         )}
         {log.map((l, i) => (
           <div key={i} className={`whitespace-pre-wrap rounded px-2 py-1 ${STYLE[l.kind]} ${l.ok === false ? 'text-rose-600' : ''}`}>
-            {l.text}
+            {l.kind === 'assistant' ? bold(l.text) : l.text}
           </div>
         ))}
-        {draft && <div className="mr-8 whitespace-pre-wrap rounded border border-slate-200 bg-white px-2 py-1">{draft}</div>}
+        {draft && <div className="mr-8 whitespace-pre-wrap rounded border border-slate-200 bg-white px-2 py-1">{bold(draft)}</div>}
         {busy && !draft && <div className="text-xs text-slate-400">working…</div>}
         <div ref={end} />
       </div>
